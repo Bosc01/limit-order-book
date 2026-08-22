@@ -73,6 +73,40 @@ TYPED_TEST(IndexedEngineTest, SelfTrade_CancelRestingKnocksOutOwnOrder) {
     EXPECT_EQ(b.qty_at(Side::Ask, 100), 0u);  // own resting order canceled
     EXPECT_EQ(b.best_bid(), 100);
     EXPECT_FALSE(b.cancel(1));                // it is really gone
+    // The kill is REPORTED: downstream must learn the resting order died.
+    ASSERT_EQ(b.listener().cancels.size(), 1u);
+    EXPECT_EQ(b.listener().cancels[0], (lobtest::Cancel{1, 7}));
+}
+
+// Owner 0 = ungrouped flow, EXEMPT from STP. Without this reservation two
+// unrelated flows that both default the owner would silently self-match-
+// prevent each other (found by adversarial review; venues scope prevention
+// to explicitly shared groups).
+TYPED_TEST(IndexedEngineTest, SelfTrade_OwnerZeroExemptUnderCancelResting) {
+    TypeParam b(Stp::CancelResting);
+    b.submit_limit(1, Side::Ask, 100, 5, Tif::GTC, 0);
+    auto r = b.submit_limit(2, Side::Bid, 100, 5, Tif::GTC, 0);
+    EXPECT_EQ(r.filled, 5u); // strangers trade; nobody gets knocked out
+    EXPECT_TRUE(b.listener().cancels.empty());
+    EXPECT_EQ(b.resting_orders(), 0u);
+}
+
+TYPED_TEST(IndexedEngineTest, SelfTrade_OwnerZeroExemptUnderRejectIncoming) {
+    TypeParam b(Stp::RejectIncoming);
+    b.submit_limit(1, Side::Ask, 100, 5, Tif::GTC, 0);
+    auto r = b.submit_limit(2, Side::Bid, 100, 5, Tif::GTC, 0);
+    EXPECT_EQ(r.filled, 5u);
+    EXPECT_FALSE(r.rejected);
+}
+
+TYPED_TEST(IndexedEngineTest, MarketIdAliasingLiveOrderRejected) {
+    TypeParam b;
+    b.submit_limit(1, Side::Ask, 100, 5);
+    // Same id as the live resting order it would fill against: rejected,
+    // book untouched, no tape (without the guard this fills 5).
+    EXPECT_EQ(b.submit_market(1, Side::Bid, 5), 0u);
+    EXPECT_EQ(b.qty_at(Side::Ask, 100), 5u);
+    EXPECT_TRUE(b.listener().trades.empty());
 }
 
 TYPED_TEST(IndexedEngineTest, SelfTrade_CancelRestingContinuesToOtherMakers) {

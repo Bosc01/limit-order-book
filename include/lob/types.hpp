@@ -10,7 +10,13 @@ namespace lob {
 using Price   = std::int64_t;
 using Qty     = std::uint32_t;
 using OrderId = std::uint64_t;
-using Owner   = std::uint32_t; // participant id, used for self-trade prevention
+// Participant id for self-trade prevention. Owner 0 is reserved as "no
+// owner": orders with owner 0 are EXEMPT from STP, matching venue practice
+// (CME SMP / Nasdaq AIQ apply prevention only between orders that share an
+// explicitly assigned group; ungrouped flow is exempt). Without this
+// reservation, two unrelated flows that both default the owner would
+// silently self-match-prevent each other.
+using Owner   = std::uint32_t;
 
 enum class Side : std::uint8_t { Bid = 0, Ask = 1 };
 
@@ -32,6 +38,12 @@ enum class Stp : std::uint8_t {
 // sentinel because valid prices are strictly positive (validated on entry).
 inline constexpr Price kNoPrice = 0;
 
+// Known tradeoff, on purpose: three booleans instead of a status enum. Two
+// outcomes look alike from the flags alone — a GTC order partially filled
+// then STP-stopped ({filled>0, rested=false}) reads like an IOC partial.
+// The gateway's ExecStatus mapping is the disambiguation layer for clients;
+// inside the engine the compact struct keeps every submit path branch-light.
+// A production API would return an explicit outcome enum.
 struct SubmitResult {
     Qty  filled   = 0;
     bool rested   = false; // remainder is now on the book
@@ -56,6 +68,11 @@ struct ModifyResult {
 struct NullListener {
     void on_trade(OrderId /*taker*/, OrderId /*maker*/, Price /*px*/,
                   Qty /*qty*/) {}
+    // Fired when the engine removes a resting order WITHOUT its owner asking
+    // (today: STP CancelResting knocking out the resting order). Without
+    // this event the order would just vanish — its owner, and any drop-copy
+    // consumer, would still believe it is live.
+    void on_cancel(OrderId /*id*/, Owner /*owner*/) {}
 };
 
 } // namespace lob

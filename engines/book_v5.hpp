@@ -65,7 +65,9 @@ public:
     }
 
     Qty submit_market(OrderId id, Side side, Qty qty, Owner owner = 0) {
-        if (qty == 0) [[unlikely]] return 0;
+        // A market order never rests, but its id still prints on the trade
+        // tape as the taker: reject an id that aliases a live resting order.
+        if (qty == 0 || orders_.find(id) != orders_.end()) [[unlikely]] return 0;
         if (side == Side::Bid)
             return stp_ == Stp::None
                        ? match<Side::Bid, false>(id, kMaxPrice, qty, owner).filled
@@ -282,11 +284,14 @@ private:
             Order* o = lvl.head;
             while (o != nullptr) {
                 if constexpr (StpOn) {
-                    if (o->owner == owner) {
+                    // owner 0 = ungrouped flow, exempt from STP by contract
+                    if (owner != 0 && o->owner == owner) {
                         if (stp_ == Stp::RejectIncoming) {
                             m.stp_stopped = true;
                             break;
                         }
+                        // CancelResting: own order leaves unfilled.
+                        listener_.on_cancel(o->id, o->owner);
                         Order* next = o->next;
                         orders_.erase(o->id);
                         unlink(lvl, o);
@@ -330,7 +335,7 @@ private:
                 avail += lvl.total_qty;
             } else {
                 for (const Order* o = lvl.head; o; o = o->next) {
-                    if (o->owner == owner) {
+                    if (owner != 0 && o->owner == owner) {
                         if (stp_ == Stp::RejectIncoming) return false;
                         continue;
                     }

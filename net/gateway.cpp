@@ -28,6 +28,7 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <poll.h>
+#include <functional>
 #include <string>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -92,8 +93,17 @@ public:
         if (n) send_datagram(buf, n);
     }
 
+    // Engine listener hook: the engine removed a resting order without its
+    // owner asking (STP CancelResting). The owner must be told, or the
+    // order silently vanishes from their point of view.
+    void on_cancel(lob::OrderId id, lob::Owner owner) {
+        if (on_unsolicited_cancel) on_unsolicited_cancel(id, owner);
+    }
+
     // The taker side of the op currently being processed (trades inherit it).
     void set_taker_side(lob::Side s) { taker_side_ = s; }
+
+    std::function<void(lob::OrderId, lob::Owner)> on_unsolicited_cancel;
 
 private:
     std::uint64_t next_seq() { return ++seq_; }
@@ -243,19 +253,27 @@ int main(int argc, char** argv) {
     std::uint16_t port     = 9001;
     std::string   udp_ip   = "127.0.0.1";
     std::uint16_t udp_port = 9002;
+    lob::Stp      stp      = lob::Stp::None;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         if (a == "--port" && i + 1 < argc) port = std::uint16_t(atoi(argv[++i]));
         else if (a == "--udp-ip" && i + 1 < argc) udp_ip = argv[++i];
         else if (a == "--udp-port" && i + 1 < argc) udp_port = std::uint16_t(atoi(argv[++i]));
-        else { std::fprintf(stderr, "usage: gateway [--port N] [--udp-ip A] [--udp-port N]\n"); return 1; }
+        else if (a == "--stp" && i + 1 < argc) {
+            const std::string v = argv[++i];
+            if (v == "none") stp = lob::Stp::None;
+            else if (v == "cancel-resting") stp = lob::Stp::CancelResting;
+            else if (v == "reject-incoming") stp = lob::Stp::RejectIncoming;
+            else { std::fprintf(stderr, "bad --stp value\n"); return 1; }
+        }
+        else { std::fprintf(stderr, "usage: gateway [--port N] [--udp-ip A] [--udp-port N] [--stp none|cancel-resting|reject-incoming]\n"); return 1; }
     }
 
     std::signal(SIGPIPE, SIG_IGN);
     std::signal(SIGINT, on_signal);
     std::signal(SIGTERM, on_signal);
 
-    Engine book; // FeedPublisher listener wired in below
+    Engine book(stp); // FeedPublisher listener wired in below
     FeedPublisher& feed = book.listener();
     if (!feed.open(udp_ip.c_str(), udp_port)) {
         std::fprintf(stderr, "cannot open UDP feed to %s:%u\n", udp_ip.c_str(), udp_port);
@@ -269,6 +287,16 @@ int main(int argc, char** argv) {
 
     std::vector<Connection> conns;
     lob::Owner next_owner = 1;
+
+    // Route STP kill notifications back to the owning client as an
+    // unsolicited cancel report.
+    feed.on_unsolicited_cancel = [&conns](lob::OrderId id, lob::Owner owner) {
+        for (auto& c : conns)
+            if (c.owner == owner && !c.dead) {
+                send_exec(c, id, 0, lobnet::ExecStatus::Canceled);
+                break;
+            }
+    };
 
     while (!g_stop) {
         std::vector<pollfd> pfds;

@@ -51,7 +51,9 @@ public:
     }
 
     Qty submit_market(OrderId id, Side side, Qty qty, Owner owner = 0) {
-        if (qty == 0) return 0;
+        // A market order never rests, but its id still prints on the trade
+        // tape as the taker: reject an id that aliases a live resting order.
+        if (qty == 0 || orders_.find(id) != orders_.end()) return 0;
         // A market order is a limit order with no price constraint that
         // never rests — one matching loop serves both (we pass the most
         // aggressive possible price instead of a special case).
@@ -193,12 +195,13 @@ private:
             Order* o = lvl.head;
             while (o != nullptr && m.filled < want) {
                 Order* next = o->next; // o may be unlinked below
-                if (o->owner == owner && stp_ != Stp::None) {
+                if (owner != 0 && o->owner == owner && stp_ != Stp::None) {
                     if (stp_ == Stp::RejectIncoming) {
                         m.stp_stopped = true;
                         break;
                     }
                     // CancelResting: own order leaves the book unfilled.
+                    listener_.on_cancel(o->id, o->owner);
                     orders_.erase(o->id);
                     unlink(lvl, o);
                     delete o;
@@ -237,7 +240,7 @@ private:
                 avail += lvl.total_qty;
             } else {
                 for (const Order* o = lvl.head; o; o = o->next) {
-                    if (o->owner == owner) {
+                    if (owner != 0 && o->owner == owner) {
                         if (stp_ == Stp::RejectIncoming) return false;
                         continue; // CancelResting: own qty is not liquidity
                     }

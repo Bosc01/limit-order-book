@@ -90,6 +90,32 @@ TEST(FinalEngine, IdZeroReservedAndRejected) {
     EXPECT_FALSE(b.cancel(0));
 }
 
+TEST(FinalEngine, MarketProtectionCapsSweep) {
+    // Thin book: touch at 100, next liquidity 20000 ticks away. Without
+    // protection a market buy would sweep to the far level; with a 3-tick
+    // protection band it fills the touch and the remainder dies.
+    lob::OrderBookT<Recorder> b(Stp::None, 1u << 10, 1, 1 << 15, 4096,
+                                /*protection=*/3);
+    b.submit_limit(1, Side::Ask, 100, 10);
+    b.submit_limit(2, Side::Ask, 20'000, 5'000);
+    EXPECT_EQ(b.submit_market(9, lob::Side::Bid, 200), 10u);
+    EXPECT_EQ(b.qty_at(Side::Ask, 20'000), 5'000u); // never touched
+}
+
+TEST(FinalEngine, MarketProtectionWithinBandStillSweeps) {
+    lob::OrderBookT<Recorder> b(Stp::None, 1u << 10, 1, 1 << 15, 4096, 3);
+    b.submit_limit(1, Side::Ask, 100, 5);
+    b.submit_limit(2, Side::Ask, 102, 5);
+    b.submit_limit(3, Side::Ask, 104, 5); // 104 > 100+3: protected away
+    EXPECT_EQ(b.submit_market(9, lob::Side::Bid, 15), 10u);
+    EXPECT_EQ(b.qty_at(Side::Ask, 104), 5u);
+}
+
+TEST(FinalEngine, MarketProtectionNoReferencePriceRejects) {
+    lob::OrderBookT<Recorder> b(Stp::None, 1u << 10, 1, 1 << 15, 4096, 3);
+    EXPECT_EQ(b.submit_market(9, lob::Side::Bid, 10), 0u); // empty book
+}
+
 TEST(FinalEngine, SteadyStateNeverGrows) {
     // Pool and id map sized for the flow -> zero growth events. This is the
     // unit-test twin of the benchmark's "0 allocations per op" claim.

@@ -24,12 +24,10 @@ using lobtest::Recorder;
 namespace {
 
 template <class RefBook, class TestBook>
-void run_differential(std::uint64_t seed, std::size_t n_ops) {
+void run_differential_books(RefBook& ref, TestBook& tst, std::uint64_t seed,
+                            std::size_t n_ops) {
     bench::WorkloadGen gen(seed);
     const auto ops = gen.generate(n_ops);
-
-    RefBook  ref;
-    TestBook tst;
 
     for (std::size_t i = 0; i < ops.size(); ++i) {
         const bench::Op& op = ops[i];
@@ -84,6 +82,13 @@ void run_differential(std::uint64_t seed, std::size_t n_ops) {
     ASSERT_EQ(ref.resting_orders(), tst.resting_orders());
 }
 
+template <class RefBook, class TestBook>
+void run_differential(std::uint64_t seed, std::size_t n_ops) {
+    RefBook  ref;
+    TestBook tst;
+    run_differential_books(ref, tst, seed, n_ops);
+}
+
 } // namespace
 
 using Naive = lob::NaiveBookT<Recorder>;
@@ -124,4 +129,13 @@ TEST(Differential, NaiveVsFinal_Seed1337_100k) {
 // at 1M ops — deeper coverage than the naive pairs can afford.
 TEST(Differential, V1VsFinal_Seed7_1M) {
     run_differential<lob::v1::BookT<Recorder>, lob::OrderBookT<Recorder>>(7, 1'000'000);
+}
+
+// Market-with-protection armed on BOTH books: the clamp must bite
+// identically, including the "no reference price" reject.
+TEST(Differential, NaiveVsFinal_Protection3_Seed42_200k) {
+    lob::NaiveBookT<Recorder> ref(/*protection=*/3);
+    lob::OrderBookT<Recorder> tst(lob::Stp::None, 1u << 17, 1, lob::Price{1} << 15,
+                                  std::size_t{1} << 18, /*protection=*/3);
+    run_differential_books(ref, tst, 42, 200'000);
 }

@@ -28,6 +28,11 @@ namespace lob {
 template <class Listener = NullListener>
 class NaiveBookT {
 public:
+    // market_protection_ticks > 0 caps how far through the book a market
+    // order may sweep past the touch (CME market-with-protection). 0 = off.
+    explicit NaiveBookT(Price market_protection_ticks = 0)
+        : protection_(market_protection_ticks) {}
+
     Listener& listener() { return listener_; }
 
     SubmitResult submit_limit(OrderId id, Side side, Price px, Qty qty,
@@ -49,9 +54,21 @@ public:
         return r;
     }
 
-    // Market = "fill what you can, discard the rest" (IOC by nature).
+    // Market = "fill what you can, discard the rest" (IOC by nature). With
+    // protection armed, "what you can" stops protection_ ticks past the
+    // touch; the remainder is discarded (a venue may instead rest it at the
+    // protection price — documented simplification).
     Qty submit_market(OrderId id, Side side, Qty qty, Owner = 0) {
         if (qty == 0) return 0;
+        if (protection_ > 0) {
+            const Price ref = (side == Side::Bid) ? best_ask() : best_bid();
+            if (ref == kNoPrice) return 0; // no reference price: reject
+            const Price lim =
+                (side == Side::Bid) ? ref + protection_ : ref - protection_;
+            return (side == Side::Bid)
+                       ? match(asks_, id, qty, [lim](Price b) { return b <= lim; })
+                       : match(bids_, id, qty, [lim](Price b) { return b >= lim; });
+        }
         return (side == Side::Bid)
                    ? match(asks_, id, qty, [](Price) { return true; })
                    : match(bids_, id, qty, [](Price) { return true; });
@@ -210,6 +227,7 @@ private:
 
     Bids bids_;
     Asks asks_;
+    Price protection_ = 0;
     [[no_unique_address]] Listener listener_;
 };
 

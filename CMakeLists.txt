@@ -87,6 +87,16 @@ if(LOB_SANITIZE)
   endforeach()
 endif()
 
+# Coverage build: cmake -DLOB_COVERAGE=ON with an LLVM toolchain, then
+#   LLVM_PROFILE_FILE=cov.profraw ./lob_tests
+#   llvm-profdata merge -sparse cov.profraw -o cov.profdata
+#   llvm-cov report ./lob_tests -instr-profile=cov.profdata
+option(LOB_COVERAGE "instrument lob_tests for llvm source-based coverage" OFF)
+if(LOB_COVERAGE)
+  target_compile_options(lob_tests PRIVATE -fprofile-instr-generate -fcoverage-mapping)
+  target_link_options(lob_tests PRIVATE -fprofile-instr-generate)
+endif()
+
 enable_testing()
 include(GoogleTest)
 if(NOT LOB_SANITIZE)

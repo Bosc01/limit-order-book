@@ -11,11 +11,12 @@ Headline numbers on Apple M5, single thread, 2M-operation replay (seed 42,
 
 | metric | value |
 |---|---|
-| throughput | ~26M ops/s |
-| mean latency | 29 ns |
-| p50 / p90 / p99 / p99.9 | 41 / 42 / 84 / 125 ns |
-| heap allocations per op | 0.000 |
-| cancel, naive baseline vs final | 17.6 us vs 25 ns (~700x) |
+| throughput | ~27M ops/s |
+| mean latency | 28 ns |
+| p50 / p90 / p99 / p99.9 | 41 / 42 / 84 / 166 ns |
+| heap allocations per op | 0.000 (measured every run) |
+| cancel, naive baseline vs final | 17.6 us vs 24 ns (~740x) |
+| line coverage (llvm-cov) | 97.7% |
 
 ## Architecture
 
@@ -51,9 +52,14 @@ Three questions, each answered in O(1):
 
 Order types: limit, market, cancel, modify. Time in force: GTC, IOC, FOK.
 Self-trade prevention: none, cancel-resting, or reject-incoming, selected at
-construction and compiled out of the match loop when off. Modify follows
-exchange convention: a quantity decrease at the same price keeps queue
-position; a price change or size increase re-enters as a fresh arrival.
+construction and compiled out of the match loop when off; owner 0 is
+reserved as "ungrouped, STP-exempt" the way venues scope prevention to
+explicit groups, and a CancelResting kill emits an unsolicited cancel event
+so the owner learns the order died. Modify follows exchange convention: a
+quantity decrease at the same price keeps queue position; a price change or
+size increase re-enters as a fresh arrival, and the result distinguishes
+"unknown id" from "bad amend on a live order". Market orders support a
+CME-style protection band (cap on how far past the touch a sweep may run).
 
 ## The measured optimization story
 
@@ -63,35 +69,36 @@ thing. Medians over 5 runs, 200k measured ops each:
 
 | engine | change | mean ns | p50 | p90 | p99 | p99.9 | Mops/s | allocs/op |
 |---|---|---|---|---|---|---|---|---|
-| naive | std::map + std::list, O(n) cancel | 7431 | 83 | 24517 | 53160 | 61743 | 0.13 | 0.44 |
-| v1 | map ladder + intrusive list + hash index | 50.0 | 42 | 84 | 125 | 250 | 16.96 | 0.88 |
-| v2 | + slab pool for orders | 40.9 | 42 | 83 | 125 | 209 | 20.05 | 0.44 |
-| v3 | + cache-line Order layout | 41.2 | 42 | 83 | 125 | 167 | 19.96 | 0.44 |
-| v4 | + branch discipline in match loop | 42.4 | 42 | 83 | 125 | 167 | 19.50 | 0.44 |
-| v5 | + flat banded ladder with bitmap | 38.2 | 42 | 42 | 125 | 500 | 21.08 | 0.44 |
-| final | + open-addressing id map | 27.1 | 41 | 42 | 83 | 125 | 27.52 | 0.000 |
+| naive | std::map + std::list, O(n) cancel | 7459 | 42 | 24393 | 53035 | 70594 | 0.13 | 0.44 |
+| v1 | map ladder + intrusive list + hash index | 48.6 | 42 | 84 | 125 | 250 | 17.39 | 0.88 |
+| v2 | + slab pool for orders | 40.0 | 42 | 83 | 125 | 167 | 20.47 | 0.44 |
+| v3 | + cache-line Order layout | 40.1 | 42 | 83 | 125 | 167 | 20.46 | 0.44 |
+| v4 | + branch discipline in match loop | 39.9 | 42 | 83 | 125 | 167 | 20.53 | 0.44 |
+| v5 | + flat banded ladder with bitmap | 36.0 | 42 | 42 | 84 | 167 | 22.27 | 0.44 |
+| final | + open-addressing id map | 25.5 | 41 | 42 | 83 | 125 | 29.13 | 0.000 |
 
 Honest readings, including the failures:
 
 * **v2, the pool, is a real win**: +18% throughput, tighter p99.9. Malloc was
   paying size-class bookkeeping and scattering orders across the heap.
-* **v3, alignment, measured neutral here.** The five-run spreads overlap
+* **v3, alignment, measured neutral.** The five-run spreads overlap
   completely. The working set fits in cache and the pool already delivers
   locality, so straddle-avoidance had nothing left to save. Kept because it
   costs 14% memory for insurance the profile cannot show on this machine.
-* **v4, branch elimination, also neutral to slightly negative.** The lesson is
-  worth more than a win: on a wide out-of-order core, well-predicted branches
-  are nearly free, so removing them buys nothing measurable. The STP
-  specialization (checks compiled out when the policy is off) is kept for the
-  configurability, on the evidence that it costs nothing.
-* **v5, the flat ladder, is a modest real win** (p90 halves) and it moves the
-  tail: p99.9 rises to 500 ns while everything below improves. That tail is
-  the bitmap rescan after the best level empties, plus the surviving
-  unordered_map churn.
-* **The final id map is the biggest post-v1 win**: +31% throughput, p99.9 back
-  down to 125 ns, max latency collapses from ~57 us to ~8 us, and allocations
-  hit exactly zero. The general-purpose allocator was the dominant remaining
-  noise source, reached through std::unordered_map's per-node behavior.
+* **v4, branch elimination, also neutral** (within run-to-run spread across
+  repeated five-run batches). The lesson is worth more than a win: on a wide
+  out-of-order core, well-predicted branches are nearly free, so removing
+  them buys nothing measurable. The STP specialization (checks compiled out
+  when the policy is off) is kept for the configurability, on the evidence
+  that it costs nothing.
+* **v5, the flat ladder, is a modest real win**: p90 halves and p99 drops a
+  granule; the new tail source (the bitmap rescan after a best level
+  empties) shows up in occasional runs as a fatter p99.9.
+* **The final id map is the biggest post-v1 win**: +31% throughput, p99.9
+  down to 125 ns, max latency collapses from ~57 us to ~8 us, and
+  allocations hit exactly zero. The general-purpose allocator was the
+  dominant remaining noise source, reached through std::unordered_map's
+  per-node behavior.
 
 ## Benchmark methodology
 
@@ -119,7 +126,8 @@ Honest readings, including the failures:
 
 ## Correctness
 
-386 GoogleTest cases across 21 suites:
+408 GoogleTest cases across 21 suites (97.7% line coverage, 99.2% function
+coverage by llvm-cov over the engines and wire protocol):
 
 * **A typed semantics suite runs identically against all seven engines.** The
   naive book is the executable specification; optimized engines must agree
@@ -144,6 +152,14 @@ Honest readings, including the failures:
 * **End-to-end smoke test** (`scripts/net_smoke.sh`): gateway + UDP subscriber
   + 1000-order TCP burst; asserts every order acknowledged, trades observed,
   and zero feed sequence gaps on loopback.
+* **Adversarial review found real bugs, and the fixes are tested.** A
+  multi-agent review pass over the finished engine produced two confirmed
+  defects that the 386-test suite of the time could not see: STP with a
+  defaulted owner id let two unrelated flows self-match-prevent each other
+  (owner 0 is now reserved as exempt), and a CancelResting kill was
+  invisible to the killed order's owner (there is now an unsolicited cancel
+  event, wired through the gateway). Both carry regression tests across all
+  six indexed engines.
 
 ## The networking layer
 

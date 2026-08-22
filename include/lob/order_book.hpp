@@ -50,15 +50,20 @@ namespace lob {
 template <class Listener = NullListener>
 class OrderBookT {
 public:
+    // market_protection_ticks > 0 caps how far through the book a market
+    // order may sweep past the touch (CME market-with-protection); the
+    // remainder is discarded. 0 disables the cap.
     explicit OrderBookT(Stp stp = Stp::None,
                         std::size_t pool_capacity = 1u << 17,
                         Price band_lo = 1, Price band_hi = Price{1} << 15,
-                        std::size_t id_map_slots = std::size_t{1} << 18)
+                        std::size_t id_map_slots = std::size_t{1} << 18,
+                        Price market_protection_ticks = 0)
         : bids_(band_lo, band_hi),
           asks_(band_lo, band_hi),
           orders_(id_map_slots),
           stp_(stp),
-          pool_(pool_capacity) {}
+          pool_(pool_capacity),
+          protection_(market_protection_ticks) {}
     ~OrderBookT() = default;
     OrderBookT(const OrderBookT&)            = delete;
     OrderBookT& operator=(const OrderBookT&) = delete;
@@ -80,14 +85,24 @@ public:
     }
 
     Qty submit_market(OrderId id, Side side, Qty qty, Owner owner = 0) {
-        if (qty == 0) [[unlikely]] return 0;
+        // A market order never rests, but its id prints on the trade tape as
+        // the taker: id 0 and ids aliasing a live resting order are rejected.
+        if (id == 0 || qty == 0 || orders_.find(id) != nullptr) [[unlikely]]
+            return 0;
+        Price bid_lim = kMaxPrice, ask_lim = kMinPrice;
+        if (protection_ > 0) {
+            const Price ref = (side == Side::Bid) ? asks_.best() : bids_.best();
+            if (ref == kNoPrice) return 0; // no reference price: reject
+            if (side == Side::Bid) bid_lim = ref + protection_;
+            else                   ask_lim = ref - protection_;
+        }
         if (side == Side::Bid)
             return stp_ == Stp::None
-                       ? match<Side::Bid, false>(id, kMaxPrice, qty, owner).filled
-                       : match<Side::Bid, true>(id, kMaxPrice, qty, owner).filled;
+                       ? match<Side::Bid, false>(id, bid_lim, qty, owner).filled
+                       : match<Side::Bid, true>(id, bid_lim, qty, owner).filled;
         return stp_ == Stp::None
-                   ? match<Side::Ask, false>(id, kMinPrice, qty, owner).filled
-                   : match<Side::Ask, true>(id, kMinPrice, qty, owner).filled;
+                   ? match<Side::Ask, false>(id, ask_lim, qty, owner).filled
+                   : match<Side::Ask, true>(id, ask_lim, qty, owner).filled;
     }
 
     // Cancel, the operation the architecture is built around, step by step:
@@ -339,12 +354,14 @@ private:
             Order* o = lvl.head;
             while (o != nullptr) {
                 if constexpr (StpOn) {
-                    if (o->owner == owner) {
+                    // owner 0 = ungrouped flow, exempt from STP by contract
+                    if (owner != 0 && o->owner == owner) {
                         if (stp_ == Stp::RejectIncoming) {
                             m.stp_stopped = true;
                             break;
                         }
                         // CancelResting: own order leaves unfilled.
+                        listener_.on_cancel(o->id, o->owner);
                         Order* next = o->next;
                         orders_.erase(o->id);
                         unlink(lvl, o);
@@ -395,7 +412,7 @@ private:
                 avail += lvl.total_qty;
             } else {
                 for (const Order* o = lvl.head; o; o = o->next) {
-                    if (o->owner == owner) {
+                    if (owner != 0 && o->owner == owner) {
                         if (stp_ == Stp::RejectIncoming) return false;
                         continue;
                     }
@@ -505,6 +522,7 @@ private:
     IdMap<Order*>     orders_;
     Stp               stp_;
     Pool<Order>       pool_;
+    Price             protection_ = 0;
     [[no_unique_address]] Listener listener_;
 };
 
