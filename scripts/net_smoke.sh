@@ -3,7 +3,7 @@
 # Asserts: every order acknowledged, feed saw trades and book updates with
 # zero sequence gaps (loopback UDP does not drop), gateway survives.
 set -u
-BUILD="${1:-build-cmake}"
+BUILD="${1:-build}"
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PORT=9101
 UDP_PORT=9102
