@@ -100,6 +100,31 @@ Honest readings, including the failures:
   dominant remaining noise source, reached through std::unordered_map's
   per-node behavior.
 
+## Scale, endurance, and the wire
+
+Three more measurements, run after the single-thread story was settled:
+
+* **Sharding** (`--threads N`: one engine per thread, disjoint instruments,
+  no shared state, the way real venues scale): aggregate throughput peaks at
+  **~85M ops/s at 8 shards**, still zero allocations. The per-shard rate
+  falls from 24.6M (2 shards) to ~11M (8 shards): the shards saturate the
+  shared memory fabric, and the efficiency cores are slower. Matching is
+  memory-latency bound, which is exactly why production engines pin one
+  engine thread per core and stop there.
+* **Endurance** (100M operations, single thread, book growing to 328k live
+  orders): **18.6M ops/s sustained, p99.9 333 ns, max 52 us, zero
+  allocations**, with the pool and id map sized for the session
+  (`--pool 524288 --idmap 1048576`). Two instructive failure modes were
+  measured on the way: default sizing let the safety valve open (4 growth
+  allocations, and a 23 ms worst op from an id-map rehash), and oversizing
+  the id map made every probe a DRAM miss (13.3M ops/s). Capacity planning
+  is a latency decision.
+* **Wire-to-wire** (order client, 20k synchronous round trips over loopback
+  TCP): **p50 20.9 us, p99 53.8 us, p99.9 85.4 us**, measured at the client
+  from send() to the last byte of the exec report. The engine core is 28 ns;
+  the kernel round trip is ~750x that, which is the whole argument for
+  kernel-bypass networking in production.
+
 ## Benchmark methodology
 
 * Workload is pre-generated from raw `mt19937_64` draws (seed 42), so every

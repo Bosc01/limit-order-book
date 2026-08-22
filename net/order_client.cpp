@@ -11,8 +11,11 @@
 #include <cstring>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <algorithm>
+#include <chrono>
 #include <random>
 #include <string>
+#include <vector>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -97,6 +100,11 @@ int run_auto(int fd, int n_orders, std::uint64_t seed) {
     int counts[8] = {0};
     std::uint64_t next_id = 1;
     std::uint8_t buf[128];
+    // Wire-to-wire round trip per order: send() start to last byte of the
+    // exec report, as the client experiences it. Includes both kernel
+    // traversals, TCP, framing, the engine, and the report encode.
+    std::vector<std::uint64_t> rtt_ns;
+    rtt_ns.reserve(static_cast<std::size_t>(n_orders));
 
     for (int i = 0; i < n_orders; ++i) {
         const std::uint64_t r = rng() % 100;
@@ -131,11 +139,25 @@ int run_auto(int fd, int n_orders, std::uint64_t seed) {
                                                    10'000 - lob::Price(1 + rng() % 5),
                                                    lob::Qty(1 + rng() % 30)});
         }
-        if (!len || !send_all(fd, buf, len)) return 1;
+        if (!len) return 1;
+        const auto t0 = std::chrono::steady_clock::now();
+        if (!send_all(fd, buf, len)) return 1;
         if (read_reports(fd, fb, 1, false, counts) < 0) return 1;
+        const auto t1 = std::chrono::steady_clock::now();
+        rtt_ns.push_back(static_cast<std::uint64_t>(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count()));
     }
 
+    std::sort(rtt_ns.begin(), rtt_ns.end());
+    auto pct = [&](double q) {
+        return rtt_ns[static_cast<std::size_t>(q * double(rtt_ns.size() - 1))];
+    };
     std::printf("auto mode: %d ops acknowledged\n", n_orders);
+    if (!rtt_ns.empty())
+        std::printf("wire-to-wire rtt (loopback): p50=%.1fus p90=%.1fus "
+                    "p99=%.1fus p99.9=%.1fus max=%.1fus\n",
+                    pct(0.5) / 1e3, pct(0.9) / 1e3, pct(0.99) / 1e3,
+                    pct(0.999) / 1e3, double(rtt_ns.back()) / 1e3);
     for (int s = 0; s < 8; ++s)
         if (counts[s])
             std::printf("  %-13s %d\n",

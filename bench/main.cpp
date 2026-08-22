@@ -1,12 +1,15 @@
 // Benchmark driver. Usage:
 //   bench [engine] [--ops N] [--warmup N] [--seed S] [--label STR] [--csv PATH]
 // Engines: naive (more added in later phases).
+#include <atomic>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <sys/stat.h>
+#include <thread>
 #include <vector>
 
 #include "alloc_count.hpp"
@@ -27,11 +30,14 @@ namespace {
 
 struct Config {
     std::string engine  = "naive";
-    std::size_t ops     = 200'000; // measured ops
+    std::size_t ops     = 200'000; // measured ops PER SHARD
     std::size_t warmup  = 20'000;
     std::uint64_t seed  = 42;
     std::string label   = "baseline";
     std::string csv     = "results/bench.csv";
+    int         threads = 1; // shards; each runs its own engine instance
+    std::size_t pool    = 1u << 17;          // final engine: order-pool slots
+    std::size_t idmap   = std::size_t{1} << 18; // final engine: id-map slots
 };
 
 Config parse_args(int argc, char** argv) {
@@ -45,6 +51,9 @@ Config parse_args(int argc, char** argv) {
         if      (a == "--ops")    c.ops    = std::strtoull(next(), nullptr, 10);
         else if (a == "--warmup") c.warmup = std::strtoull(next(), nullptr, 10);
         else if (a == "--seed")   c.seed   = std::strtoull(next(), nullptr, 10);
+        else if (a == "--threads") c.threads = std::atoi(next());
+        else if (a == "--pool")   c.pool   = std::strtoull(next(), nullptr, 10);
+        else if (a == "--idmap")  c.idmap  = std::strtoull(next(), nullptr, 10);
         else if (a == "--label")  c.label  = next();
         else if (a == "--csv")    c.csv    = next();
         else if (a[0] != '-')     c.engine = a;
@@ -91,8 +100,96 @@ void append_csv(const Config& cfg, const char* kind, const bench::Summary& s,
     std::fclose(f);
 }
 
+// The final engine takes capacity parameters (pool slots, id-map slots) so
+// the endurance run can be sized for its session, which is the documented
+// production posture: growth is a safety valve, not a plan.
+template <class Book>
+std::unique_ptr<Book> make_book(const Config&) {
+    return std::make_unique<Book>();
+}
+template <>
+std::unique_ptr<lob::OrderBook> make_book<lob::OrderBook>(const Config& cfg) {
+    return std::make_unique<lob::OrderBook>(
+        lob::Stp::None, cfg.pool, lob::Price{1}, lob::Price{1} << 15, cfg.idmap);
+}
+
+// Sharded mode: one engine instance per thread, no shared state, the way
+// real venues scale matching (one instrument, one engine, one core; cross-
+// instrument flow never contends). Aggregate throughput is measured
+// conservatively as total ops / wall time of the SLOWEST shard, from a
+// common start barrier.
+template <class Book>
+int run_benchmark_sharded(const Config& cfg) {
+    const auto cal = bench::calibrate_clock();
+    const int  T   = cfg.threads;
+    std::printf("clock: %.4f ns/tick; %d shards, %zu measured ops each\n",
+                cal.ns_per_tick, T, cfg.ops);
+
+    struct Shard {
+        std::vector<bench::Op> ops;
+        bench::RunResult       res;
+    };
+    std::vector<Shard> shards(static_cast<std::size_t>(T));
+    for (int t = 0; t < T; ++t) {
+        bench::WorkloadGen gen(cfg.seed + static_cast<std::uint64_t>(t));
+        shards[std::size_t(t)].ops = gen.generate(cfg.warmup + cfg.ops);
+    }
+
+    std::atomic<int>  ready{0};
+    std::atomic<bool> go{false};
+    std::vector<std::thread> pool;
+    for (int t = 0; t < T; ++t) {
+        pool.emplace_back([&, t] {
+            auto book = make_book<Book>(cfg);
+            auto& sh = shards[std::size_t(t)];
+            sh.res = bench::run_ops_gated(*book, sh.ops, cfg.warmup, [&] {
+                ready.fetch_add(1, std::memory_order_acq_rel);
+                while (!go.load(std::memory_order_acquire)) { /* spin */ }
+            });
+        });
+    }
+    while (ready.load(std::memory_order_acquire) < T) { /* spin */ }
+    bench::alloc_count_reset();
+    const auto w0 = std::chrono::steady_clock::now();
+    go.store(true, std::memory_order_release);
+    for (auto& th : pool) th.join();
+    const auto w1 = std::chrono::steady_clock::now();
+    const double wall = std::chrono::duration<double>(w1 - w0).count();
+    const std::uint64_t allocs = bench::alloc_count_get();
+
+    double per_min = 1e18, per_max = 0;
+    std::vector<std::uint64_t> all;
+    all.reserve(std::size_t(T) * cfg.ops);
+    for (auto& sh : shards) {
+        const double thpt = double(cfg.ops) / sh.res.wall_seconds;
+        per_min = thpt < per_min ? thpt : per_min;
+        per_max = thpt > per_max ? thpt : per_max;
+        for (const auto ticks : sh.res.latency_ticks)
+            all.push_back(static_cast<std::uint64_t>(
+                std::llround(double(ticks) * cal.ns_per_tick)));
+    }
+    const double agg = double(cfg.ops) * T / wall;
+
+    auto s_all = bench::summarize(all);
+    std::printf("\nengine=%s label=%s shards=%d\n", cfg.engine.c_str(),
+                cfg.label.c_str(), T);
+    std::printf("  %-8s %9s  %10s %8s %8s %8s %8s %10s\n",
+                "kind", "count", "mean_ns", "p50", "p90", "p99", "p99.9", "max");
+    print_row("ALL", s_all);
+    append_csv(cfg, "ALL", s_all, agg);
+    std::printf("\naggregate throughput: %.0f ops/s (%.1fM) over %.2f s wall\n",
+                agg, agg / 1e6, wall);
+    std::printf("per-shard throughput: %.1fM min .. %.1fM max ops/s\n",
+                per_min / 1e6, per_max / 1e6);
+    std::printf("heap allocations in measured region: %llu (%.6f per op)\n",
+                (unsigned long long)allocs,
+                double(allocs) / (double(cfg.ops) * T));
+    return 0;
+}
+
 template <class Book>
 int run_benchmark(const Config& cfg) {
+    if (cfg.threads > 1) return run_benchmark_sharded<Book>(cfg);
     const auto cal = bench::calibrate_clock();
     std::printf("clock: %.4f ns/tick (%.1f MHz), read overhead ~%llu ticks (%.0f ns)\n",
                 cal.ns_per_tick, 1000.0 / cal.ns_per_tick,
@@ -104,7 +201,8 @@ int run_benchmark(const Config& cfg) {
     std::printf("workload: %zu ops (%zu warmup + %zu measured), seed %llu\n",
                 ops.size(), cfg.warmup, cfg.ops, (unsigned long long)cfg.seed);
 
-    Book book;
+    auto bookp = make_book<Book>(cfg);
+    Book& book = *bookp;
     auto run = bench::run_ops(book, ops, cfg.warmup); // resets alloc counter internally
     const std::uint64_t allocs = bench::alloc_count_get();
 

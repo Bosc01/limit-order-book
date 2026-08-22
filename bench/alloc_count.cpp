@@ -1,15 +1,20 @@
 #include "alloc_count.hpp"
 
+#include <atomic>
 #include <cstdlib>
 #include <new>
 
 namespace {
-std::uint64_t g_allocs = 0;
+// Relaxed atomic: the sharded (multi-thread) benchmark counts allocations
+// from every thread. Relaxed ordering is enough for a counter, and the cost
+// is irrelevant because the whole point is that this never fires on the hot
+// path.
+std::atomic<std::uint64_t> g_allocs{0};
 }
 
 namespace bench {
-void          alloc_count_reset() { g_allocs = 0; }
-std::uint64_t alloc_count_get()   { return g_allocs; }
+void          alloc_count_reset() { g_allocs.store(0, std::memory_order_relaxed); }
+std::uint64_t alloc_count_get()   { return g_allocs.load(std::memory_order_relaxed); }
 } // namespace bench
 
 // Replace global operator new/delete. With -fno-exceptions we cannot throw
@@ -18,14 +23,14 @@ std::uint64_t alloc_count_get()   { return g_allocs; }
 // recoverable condition, and pretending it is just moves the crash somewhere
 // less debuggable.
 void* operator new(std::size_t sz) {
-    ++g_allocs;
+    g_allocs.fetch_add(1, std::memory_order_relaxed);
     void* p = std::malloc(sz ? sz : 1);
     if (!p) std::abort();
     return p;
 }
 
 void* operator new[](std::size_t sz) {
-    ++g_allocs;
+    g_allocs.fetch_add(1, std::memory_order_relaxed);
     void* p = std::malloc(sz ? sz : 1);
     if (!p) std::abort();
     return p;

@@ -1,6 +1,7 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <new>
 #include <type_traits>
 #include <vector>
@@ -88,6 +89,10 @@ private:
 
     void add_slab(std::size_t elems) {
         void* mem = ::operator new(elems * sizeof(T), std::align_val_t{alignof(T)});
+        // Pre-fault: touch every page now so first-use of a slot never takes
+        // a page fault on the hot path (real engines pre-fault and mlock
+        // their pools for the same reason).
+        std::memset(mem, 0, elems * sizeof(T));
         slabs_.push_back({mem});
         cursor_          = static_cast<std::byte*>(mem);
         slab_end_        = cursor_ + elems * sizeof(T);

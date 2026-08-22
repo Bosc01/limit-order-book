@@ -48,9 +48,13 @@ struct RunResult {
 
 // Warmup ops run against the same book but are not recorded: they populate
 // the book to a realistic depth and warm caches, branch predictors, and the
-// page tables backing our sample buffer.
-template <class Book>
-RunResult run_ops(Book& book, std::span<const Op> ops, std::size_t warmup) {
+// page tables backing our sample buffer. `gate` runs between warmup and the
+// measured region: the single-thread path resets the allocation counter
+// there; the sharded benchmark parks each thread on a start barrier so all
+// shards measure concurrently.
+template <class Book, class Gate>
+RunResult run_ops_gated(Book& book, std::span<const Op> ops, std::size_t warmup,
+                        Gate gate) {
     RunResult r;
     // resize (not reserve): touching every element now pre-faults the pages,
     // so the first writes during measurement don't eat a page-fault each.
@@ -59,10 +63,7 @@ RunResult run_ops(Book& book, std::span<const Op> ops, std::size_t warmup) {
     for (std::size_t i = 0; i < warmup; ++i)
         do_not_optimize(dispatch(book, ops[i]));
 
-    // Count allocations over the MEASURED region only: the sample buffer
-    // above and the warmup's book-building must not pollute the "zero
-    // allocations on the hot path" evidence.
-    alloc_count_reset();
+    gate();
 
     const auto w0 = std::chrono::steady_clock::now();
     for (std::size_t i = warmup; i < ops.size(); ++i) {
@@ -76,6 +77,14 @@ RunResult run_ops(Book& book, std::span<const Op> ops, std::size_t warmup) {
 
     r.wall_seconds = std::chrono::duration<double>(w1 - w0).count();
     return r;
+}
+
+template <class Book>
+RunResult run_ops(Book& book, std::span<const Op> ops, std::size_t warmup) {
+    // Count allocations over the MEASURED region only: the sample buffer
+    // and the warmup's book-building must not pollute the "zero allocations
+    // on the hot path" evidence.
+    return run_ops_gated(book, ops, warmup, [] { alloc_count_reset(); });
 }
 
 } // namespace bench
