@@ -1,0 +1,9 @@
+label,engine,seed,measured_ops,kind,count,mean_ns,p50_ns,p90_ns,p99_ns,p999_ns,max_ns,throughput_ops_s
+phase1-naive-baseline,naive,42,200000,limit,119574,44.4,42,83,125,459,6459,
+phase1-naive-baseline,naive,42,200000,market,10063,32.3,41,42,125,459,2875,
+phase1-naive-baseline,naive,42,200000,cancel,70363,25563.8,25142,52726,59893,113195,199688,
+phase1-naive-baseline,naive,42,200000,ALL,200000,9021.9,42,35601,58327,78160,199688,110688
+phase1-repro-check,naive,42,200000,limit,119574,40.5,42,42,125,500,4375,
+phase1-repro-check,naive,42,200000,market,10063,29.2,41,42,84,459,1834,
+phase1-repro-check,naive,42,200000,cancel,70363,25153.9,24893,52535,58453,60035,69244,
+phase1-repro-check,naive,42,200000,ALL,200000,8875.2,42,35310,57701,59536,69244,112493
