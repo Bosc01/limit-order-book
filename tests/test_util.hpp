@@ -20,8 +20,8 @@ struct Cancel {
 };
 
 // Listener that records the trade tape so tests can assert on exact
-// maker/taker/price/qty sequences — including that trades print at the
-// RESTING order's price (price improvement goes to the taker) — and the
+// maker/taker/price/qty sequences -- including that trades print at the
+// RESTING order's price (price improvement goes to the taker) -- and the
 // unsolicited-cancel tape (STP CancelResting kills).
 struct Recorder {
     std::vector<Trade>  trades;

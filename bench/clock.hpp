@@ -14,7 +14,7 @@ namespace bench {
 //     above the work we are trying to time (out-of-order execution does not
 //     respect our intent, only data dependencies).
 //     Granularity = 1/CNTFRQ. On Apple Silicon this is commonly 24 MHz,
-//     i.e. ~41.7 ns per tick — we measure and report it rather than assume.
+//     i.e. ~41.7 ns per tick -- we measure and report it rather than assume.
 //
 //   x86_64: RDTSC. Constant-rate ("invariant TSC") on all modern parts,
 //     sub-nanosecond granularity.

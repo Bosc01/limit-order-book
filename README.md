@@ -2,11 +2,11 @@
 
 [![ci](https://github.com/Bosc01/limit-order-book/actions/workflows/ci.yml/badge.svg)](https://github.com/Bosc01/limit-order-book/actions/workflows/ci.yml)
 
-A C++20 limit order book built for one purpose: to be defensible under
-interview cross-examination at a trading firm. Every optimization is a frozen,
-benchmarked step with before and after numbers. Every semantic claim is backed
-by a test. The hot path performs zero heap allocations, and the benchmark
-proves it on every run.
+A C++20 limit order book I built because I wanted to understand how exchange
+matching engines actually work, and then could not stop optimizing. Every
+optimization is a frozen, benchmarked step with before and after numbers.
+Every semantic claim is backed by a test. The hot path performs zero heap
+allocations, and the benchmark proves it on every run.
 
 Headline numbers on Apple M5, single thread, 2M-operation replay (seed 42,
 45% passive limit, 10% aggressive limit, 5% market, 30% cancel, 10% modify):
@@ -180,7 +180,7 @@ coverage by llvm-cov over the engines and wire protocol):
   + 1000-order TCP burst; asserts every order acknowledged, trades observed,
   and zero feed sequence gaps on loopback.
 * **Adversarial review found real bugs, and the fixes are tested.** A
-  multi-agent review pass over the finished engine produced two confirmed
+  hostile review pass over the finished engine produced two confirmed
   defects that the 386-test suite of the time could not see: STP with a
   defaulted owner id let two unrelated flows self-match-prevent each other
   (owner 0 is now reserved as exempt), and a CancelResting kill was
@@ -244,7 +244,7 @@ bench/              harness: clock, workload, stats, alloc counter, driver
 net/                protocol.hpp, framing.hpp, gateway, order_client, feed_client
 tests/              GoogleTest suites incl. differential and fuzz tests
 scripts/            net_smoke.sh
-docs/               perf.md (hardware counters), INTERVIEW_PREP.md
+docs/               perf.md (hardware counter profiling guide)
 results/            benchmark CSVs
 ```
 

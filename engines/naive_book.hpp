@@ -57,7 +57,7 @@ public:
     // Market = "fill what you can, discard the rest" (IOC by nature). With
     // protection armed, "what you can" stops protection_ ticks past the
     // touch; the remainder is discarded (a venue may instead rest it at the
-    // protection price — documented simplification).
+    // protection price -- documented simplification).
     Qty submit_market(OrderId id, Side side, Qty qty, Owner = 0) {
         if (qty == 0) return 0;
         if (protection_ > 0) {
@@ -209,7 +209,7 @@ private:
 
     // The naive part: no index from id -> order, so this walks every level
     // and every order until it finds the id (or walks the WHOLE book to
-    // conclude a miss — and misses are common, because cancels race fills).
+    // conclude a miss -- and misses are common, because cancels race fills).
     template <class BookSide>
     static bool erase_from(BookSide& side, OrderId id) {
         for (auto lit = side.begin(); lit != side.end(); ++lit) {

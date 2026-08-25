@@ -9,12 +9,12 @@ namespace lobnet {
 
 // TCP delivers a byte stream, not messages: one recv() can hold half a
 // frame, three frames, or a frame and a half. This class owns that
-// reassembly, and NOTHING else — no sockets — so the parser can be unit
+// reassembly, and NOTHING else -- no sockets -- so the parser can be unit
 // tested and fuzzed by feeding bytes in adversarial chunkings.
 //
 // Security posture: the peer is untrusted. A frame longer than
 // kMaxFrameLen, a zero-length frame, or a buffer overflow attempt is a
-// protocol violation — the connection is poisoned and the caller must drop
+// protocol violation -- the connection is poisoned and the caller must drop
 // it (that is what real exchange gateways do; there is no "resync" on a
 // corrupted binary stream).
 class FrameBuffer {
@@ -40,7 +40,7 @@ public:
             if (!drain(sink)) return false;
 
             // If the buffer is still full after draining, the peer sent a
-            // frame that cannot fit — with kCapacity >> max frame size this
+            // frame that cannot fit -- with kCapacity >> max frame size this
             // only happens on garbage input.
             if (fill_ == kCapacity) {
                 poisoned_ = true;

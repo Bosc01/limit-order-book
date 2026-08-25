@@ -28,7 +28,7 @@ namespace lob::v5 {
 // The cost, stated honestly: prices outside [band_lo, band_hi) are REJECTED.
 // A production engine centers the band on the previous close and recenters
 // on a halt; this one takes the band as constructor parameters. The scan
-// after the best level empties is also the new tail-latency source — see
+// after the best level empties is also the new tail-latency source -- see
 // the benchmark discussion.
 //
 // Levels are never allocated or freed after construction: an empty level is

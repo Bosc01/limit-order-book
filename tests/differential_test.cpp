@@ -126,7 +126,7 @@ TEST(Differential, NaiveVsFinal_Seed1337_100k) {
 }
 
 // The fast pair: v1 (map-based, heap-allocating) vs final (flat everything)
-// at 1M ops — deeper coverage than the naive pairs can afford.
+// at 1M ops -- deeper coverage than the naive pairs can afford.
 TEST(Differential, V1VsFinal_Seed7_1M) {
     run_differential<lob::v1::BookT<Recorder>, lob::OrderBookT<Recorder>>(7, 1'000'000);
 }

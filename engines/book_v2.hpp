@@ -17,7 +17,7 @@ namespace lob::v2 {
 // replaces that with pop/push on a free list inside pre-reserved slabs.
 //
 // Still untouched: struct layout (v3), branch structure (v4), std::map
-// ladder (v5), unordered_map id index — which still allocates a node per
+// ladder (v5), unordered_map id index -- which still allocates a node per
 // insert (v6).
 template <class Listener = NullListener>
 class BookT {

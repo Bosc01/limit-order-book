@@ -1,6 +1,6 @@
 // Order-entry gateway + market-data publisher.
 //
-//   * TCP  (default :9001): order entry. Reliable, ordered, per-client — an
+//   * TCP  (default :9001): order entry. Reliable, ordered, per-client -- an
 //     order MUST arrive exactly once and the sender must know if it did not.
 //   * UDP  (default 127.0.0.1:9002, multicast groups supported): market
 //     data. One publisher, many subscribers, freshest-data-wins; a lost
@@ -14,7 +14,7 @@
 //   * every frame is length-checked and field-decoded with bounds checks;
 //     any malformed byte poisons the connection and it is dropped
 //   * the participant id (owner) used for self-trade prevention is ASSIGNED
-//     by the gateway per connection — a client cannot spoof someone else's
+//     by the gateway per connection -- a client cannot spoof someone else's
 //   * slow consumers are disconnected when their outbound buffer fills;
 //     a stalled client must never stall the market
 //   * SIGPIPE is ignored; a peer resetting mid-send cannot kill the process
@@ -69,7 +69,7 @@ public:
     }
 
     // Engine listener hook: every fill becomes a Trade message. Order ids
-    // are deliberately NOT published — public feeds are anonymous; ids go
+    // are deliberately NOT published -- public feeds are anonymous; ids go
     // only to the owning client via its exec report.
     void on_trade(lob::OrderId /*taker*/, lob::OrderId /*maker*/, lob::Price px,
                   lob::Qty qty) {

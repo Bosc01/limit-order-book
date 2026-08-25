@@ -4,7 +4,7 @@
 namespace lob {
 
 // Prices are integer ticks, never floating point. FP prices are a classic
-// interview trap: 0.1 + 0.2 != 0.3, and price comparison must be exact for
+// trap: 0.1 + 0.2 != 0.3, and price comparison must be exact for
 // matching to be deterministic. The tick size lives at the edge (feed/gateway),
 // not in the engine.
 using Price   = std::int64_t;
@@ -39,7 +39,7 @@ enum class Stp : std::uint8_t {
 inline constexpr Price kNoPrice = 0;
 
 // Known tradeoff, on purpose: three booleans instead of a status enum. Two
-// outcomes look alike from the flags alone — a GTC order partially filled
+// outcomes look alike from the flags alone -- a GTC order partially filled
 // then STP-stopped ({filled>0, rested=false}) reads like an IOC partial.
 // The gateway's ExecStatus mapping is the disambiguation layer for clients;
 // inside the engine the compact struct keeps every submit path branch-light.
@@ -70,7 +70,7 @@ struct NullListener {
                   Qty /*qty*/) {}
     // Fired when the engine removes a resting order WITHOUT its owner asking
     // (today: STP CancelResting knocking out the resting order). Without
-    // this event the order would just vanish — its owner, and any drop-copy
+    // this event the order would just vanish -- its owner, and any drop-copy
     // consumer, would still believe it is live.
     void on_cancel(OrderId /*id*/, Owner /*owner*/) {}
 };

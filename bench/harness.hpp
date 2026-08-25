@@ -12,7 +12,7 @@ namespace bench {
 
 // Compiler barrier: forces `v` to exist in a register/memory at this point,
 // so the optimizer cannot delete the book operations as dead code. Costs
-// zero instructions — it only constrains scheduling.
+// zero instructions -- it only constrains scheduling.
 template <class T>
 inline void do_not_optimize(T v) {
     asm volatile("" : "+r"(v) : : "memory");

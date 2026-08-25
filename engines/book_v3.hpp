@@ -16,12 +16,12 @@ namespace lob::v3 {
 //      alignof(T), so every order occupies exactly one cache line and can
 //      never straddle two. A fill or cancel touches ONE line per order
 //      instead of sometimes two. Cost: 64B instead of 56B per order (+14%
-//      memory) — cheap insurance.
+//      memory) -- cheap insurance.
 //
 //   2. Field order groups by access pattern. The match loop reads/writes
-//      qty, owner, next, id, price on every fill iteration — they sit in
+//      qty, owner, next, id, price on every fill iteration -- they sit in
 //      the first 32 bytes. prev/level/side are only touched on cancel,
-//      modify, or unlink — they live in the back half. Within one line this
+//      modify, or unlink -- they live in the back half. Within one line this
 //      matters less than the alignment, but it keeps the hot half of the
 //      struct dense if the layout is ever packed tighter, and it documents
 //      intent.

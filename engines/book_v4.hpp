@@ -15,7 +15,7 @@ namespace lob::v4 {
 //      EVERY fill iteration even for books that never arm STP. The match
 //      loop is now templated on <Side, StpOn>; submit dispatches once per
 //      order, and with StpOn=false the check does not exist in the emitted
-//      code. Side was already a template parameter from v1 — the bid and
+//      code. Side was already a template parameter from v1 -- the bid and
 //      ask loops are two separately-compiled functions with the comparison
 //      direction baked in, not a per-iteration "which side am I" branch.
 //

@@ -1,5 +1,5 @@
 // Wire-protocol tests: round-trips, hostile input, and re-framing under
-// adversarial TCP chunking. No sockets involved — that is the point of
+// adversarial TCP chunking. No sockets involved -- that is the point of
 // keeping the parser pure.
 #include <gtest/gtest.h>
 

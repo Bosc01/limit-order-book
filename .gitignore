@@ -1,3 +1,4 @@
 build*/
 third_party/
 .DS_Store
+private-notes/

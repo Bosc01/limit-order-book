@@ -12,7 +12,7 @@ namespace lob {
 //
 // Why not new/delete per order?
 //   * general-purpose malloc takes locks, maintains size classes, and can
-//     syscall (mmap) at arbitrary moments — all invisible until they land in
+//     syscall (mmap) at arbitrary moments -- all invisible until they land in
 //     your p99.9;
 //   * consecutive allocations land wherever the heap has holes, so walking a
 //     price level pointer-chases across random pages (TLB + cache misses).
@@ -22,14 +22,14 @@ namespace lob {
 //
 // Where the memory comes from: slabs are allocated up front (constructor) via
 // aligned operator new. If the pool runs dry it allocates one more slab of
-// double the size — a deliberate safety valve. A production engine sizes the
+// double the size -- a deliberate safety valve. A production engine sizes the
 // pool for the whole session (you know your venue's order-rate ceiling) and
 // treats growth as an incident; rejecting orders would also be defensible,
 // crashing would not. grow_count() exposes how often the valve opened so the
 // benchmark can prove it stayed shut.
 //
 // The free list is intrusive: a dead slot's first 8 bytes store the pointer
-// to the next dead slot, so bookkeeping costs zero extra memory — the same
+// to the next dead slot, so bookkeeping costs zero extra memory -- the same
 // trick the order book's intrusive lists use.
 template <class T>
 class Pool {

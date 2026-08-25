@@ -1,6 +1,6 @@
 // Order-entry client. Two modes:
 //   --auto N   deterministic random burst of N orders (seeded), then a
-//              summary of exec-report statuses — used by the smoke test
+//              summary of exec-report statuses -- used by the smoke test
 //   (default)  reads simple commands from stdin:
 //              buy <px> <qty> | sell <px> <qty> | mkt <b|s> <qty>
 //              cancel <id> | modify <id> <px> <qty> | quit

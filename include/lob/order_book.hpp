@@ -34,7 +34,7 @@ namespace lob {
 // Memory: every Order lives in a pre-sized slab pool (one 64-byte cache
 // line each), the ladder and bitmap are allocated at construction, and the
 // id map is a pre-sized flat array. At steady state the engine performs
-// ZERO heap allocations — the benchmark's interposed operator new proves it.
+// ZERO heap allocations -- the benchmark's interposed operator new proves it.
 //
 // Threading model: none, on purpose. One engine instance = one thread. The
 // determinism that makes the differential tests possible is the same
@@ -124,7 +124,7 @@ public:
 
     // Exchange-standard amend semantics: quantity decrease at the same price
     // amends in place and KEEPS queue position; a price change or quantity
-    // increase forfeits priority — the order re-enters as a fresh GTC
+    // increase forfeits priority -- the order re-enters as a fresh GTC
     // arrival (and may cross). A qty-0 amend is rejected, not treated as a
     // cancel: cancel(id) is the only removal path. `found` disambiguates
     // "id unknown, order is gone" from "bad amend, order still live".
@@ -372,7 +372,7 @@ private:
                 }
                 if (o->qty > remaining) {
                     // Maker outlives taker: the common exit. Reduce, report,
-                    // done — no unlink, no map traffic.
+                    // done -- no unlink, no map traffic.
                     o->qty        -= remaining;
                     lvl.total_qty -= remaining;
                     listener_.on_trade(taker, o->id, lvl.price, remaining);

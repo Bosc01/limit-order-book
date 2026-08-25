@@ -11,8 +11,8 @@ namespace lob {
 //
 // Why not std::unordered_map? Chaining: every insert heap-allocates a node,
 // every lookup chases at least one out-of-line pointer, and erase frees to
-// the general allocator. That is one allocation per resting order — on the
-// hottest path in the engine — plus a cache miss per cancel.
+// the general allocator. That is one allocation per resting order -- on the
+// hottest path in the engine -- plus a cache miss per cancel.
 //
 // This map is a single flat array of {key, value} slots. Linear probing:
 // a lookup lands on the hashed slot and walks forward; with a load factor
@@ -27,7 +27,7 @@ namespace lob {
 // chains grow monotonically under the book's cancel-heavy churn; backward
 // shift keeps lookups at their theoretical cost forever.
 //
-// Key 0 marks an empty slot, so OrderId 0 is reserved — the engine rejects
+// Key 0 marks an empty slot, so OrderId 0 is reserved -- the engine rejects
 // it at the door (real venues also reserve sentinel ids).
 template <class V>
 class IdMap {

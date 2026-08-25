@@ -7,7 +7,7 @@
 
 namespace lob::v1 {
 
-// Engine v1 — the target architecture, correct-first, not yet fast.
+// Engine v1 -- the target architecture, correct-first, not yet fast.
 //
 // Three layered structures:
 //   1. Price ladder: std::map per side (bids sorted descending, asks
@@ -40,7 +40,7 @@ public:
                               Tif tif = Tif::GTC, Owner owner = 0) {
         if (qty == 0 || px <= 0) return {0, false, true};
         // Reject id reuse while the original still rests. (Ids of orders
-        // that already left the book are not tracked — remembering every id
+        // that already left the book are not tracked -- remembering every id
         // ever seen is the gateway's job, not the matching engine's.)
         if (orders_.find(id) != orders_.end()) return {0, false, true};
 
@@ -55,7 +55,7 @@ public:
         // tape as the taker: reject an id that aliases a live resting order.
         if (qty == 0 || orders_.find(id) != orders_.end()) return 0;
         // A market order is a limit order with no price constraint that
-        // never rests — one matching loop serves both (we pass the most
+        // never rests -- one matching loop serves both (we pass the most
         // aggressive possible price instead of a special case).
         return (side == Side::Bid)
                    ? match<Side::Bid>(id, kMaxPrice, qty, owner).filled
@@ -63,7 +63,7 @@ public:
     }
 
     bool cancel(OrderId id) {
-        const auto it = orders_.find(id);        // O(1) — the whole point
+        const auto it = orders_.find(id);        // O(1) -- the whole point
         if (it == orders_.end()) return false;
         Order* o = it->second;
         orders_.erase(it);
@@ -74,7 +74,7 @@ public:
 
     // Exchange-standard semantics: qty decrease at same price amends in
     // place and KEEPS queue position; price change or qty increase loses
-    // priority — the order re-enters as a fresh GTC arrival (and may cross).
+    // priority -- the order re-enters as a fresh GTC arrival (and may cross).
     ModifyResult modify(OrderId id, Price new_px, Qty new_qty) {
         const auto it = orders_.find(id);
         if (it == orders_.end()) return {};
@@ -142,8 +142,8 @@ private:
     };
 
     struct Level {
-        Order*        head = nullptr; // oldest — fills first
-        Order*        tail = nullptr; // newest — arrivals append here
+        Order*        head = nullptr; // oldest -- fills first
+        Order*        tail = nullptr; // newest -- arrivals append here
         std::uint64_t total_qty = 0;  // u64: sum of many u32s must not wrap
         std::uint32_t count = 0;
         Price         price = 0;

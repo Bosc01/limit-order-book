@@ -1,5 +1,5 @@
 // Market-data subscriber: binds the UDP feed port, decodes Trade and Book
-// messages, and tracks sequence gaps — the thing every real feed handler
+// messages, and tracks sequence gaps -- the thing every real feed handler
 // must do, because UDP delivers best-effort.
 //
 //   --summary-every N   print one status line per N messages (default 500)

@@ -19,7 +19,7 @@ std::uint64_t alloc_count_get()   { return g_allocs.load(std::memory_order_relax
 
 // Replace global operator new/delete. With -fno-exceptions we cannot throw
 // std::bad_alloc; allocation failure aborts, which is the right behavior for
-// a trading system anyway — running out of memory mid-session is not a
+// a trading system anyway -- running out of memory mid-session is not a
 // recoverable condition, and pretending it is just moves the crash somewhere
 // less debuggable.
 void* operator new(std::size_t sz) {

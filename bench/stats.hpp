@@ -15,7 +15,7 @@ struct Summary {
 
 // Nearest-rank percentile on a sorted vector. We keep every sample and sort
 // once at the end (exact percentiles) instead of using a histogram
-// (approximate). At benchmark scale — millions of 8-byte samples — the
+// (approximate). At benchmark scale -- millions of 8-byte samples -- the
 // memory cost is trivial and exactness beats cleverness.
 inline std::uint64_t percentile(const std::vector<std::uint64_t>& sorted, double q) {
     if (sorted.empty()) return 0;

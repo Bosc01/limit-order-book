@@ -38,8 +38,8 @@ struct Op {
 // 20% IOC, 10% FOK); passive orders are GTC.
 //
 // The generator does not simulate matching, so a cancel/modify may target
-// an already-filled order. That is realistic — a cancel racing a fill loses
-// at real exchanges too — and it keeps generation a pure function of the
+// an already-filled order. That is realistic -- a cancel racing a fill loses
+// at real exchanges too -- and it keeps generation a pure function of the
 // seed, so every engine version replays the identical byte-for-byte stream.
 class WorkloadGen {
 public:
@@ -86,7 +86,7 @@ private:
 
     // Priced 0..2 ticks *through* the mid, so it crosses resting orders and
     // exercises the matching loop. GTC remainder may rest, so it is tracked
-    // (IOC/FOK ids are tracked too — cancels against them simply miss,
+    // (IOC/FOK ids are tracked too -- cancels against them simply miss,
     // which is realistic noise).
     Op aggressive_limit() {
         const lob::Side  s   = rand_side();
@@ -118,7 +118,7 @@ private:
 
     // 50/50 between a size-down at the same price (engine keeps queue
     // position) and a reprice (engine treats as cancel + fresh arrival).
-    // The order stays in live_ — it is still on the book under the same id.
+    // The order stays in live_ -- it is still on the book under the same id.
     Op modify_op() {
         const std::size_t idx = draw() % live_.size();
         LiveRef& ref = live_[idx];

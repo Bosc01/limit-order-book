@@ -12,10 +12,10 @@
 //
 // Real venues do the same shape (ITCH/OUCH are length-prefixed binary; ITCH
 // happens to be big-endian). We pick little-endian and assert the host
-// matches — both deployment targets (arm64, x86_64) are LE, and a protocol
+// matches -- both deployment targets (arm64, x86_64) are LE, and a protocol
 // spec that matches the host means encode/decode is a copy, not a swap.
 //
-// Every decode is bounds-checked field-by-field via memcpy — never by
+// Every decode is bounds-checked field-by-field via memcpy -- never by
 // casting the receive buffer to a packed struct. memcpy of known-size
 // fields is UB-free on any alignment, optimizes to plain loads, and makes
 // the "attacker controls the bytes" review tractable.
@@ -25,7 +25,7 @@ static_assert(std::endian::native == std::endian::little,
               "wire format is little-endian; add byte swaps for BE hosts");
 
 // Largest legal frame body. Sized by the biggest real message (BookMsg:
-// 1 type + 8 seq + 2 sides * 5 levels * 16 bytes = 169) with headroom —
+// 1 type + 8 seq + 2 sides * 5 levels * 16 bytes = 169) with headroom --
 // found the hard way when the first smoke test rejected every book snapshot
 // as hostile input. Every other message is under 32 bytes.
 inline constexpr std::uint16_t kMaxFrameLen = 256;
@@ -113,7 +113,7 @@ public:
     void put(T v) {
         static_assert(std::is_trivially_copyable_v<T>);
         if (pos_ + sizeof(T) <= cap_) std::memcpy(buf_ + pos_, &v, sizeof(T));
-        pos_ += sizeof(T); // overflow is caught by ok() — never writes past cap
+        pos_ += sizeof(T); // overflow is caught by ok() -- never writes past cap
     }
 
     bool        ok() const   { return pos_ <= cap_; }
