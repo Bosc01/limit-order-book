@@ -1,5 +1,7 @@
 # Limit Order Book Matching Engine
 
+[![ci](https://github.com/Bosc01/limit-order-book/actions/workflows/ci.yml/badge.svg)](https://github.com/Bosc01/limit-order-book/actions/workflows/ci.yml)
+
 A C++20 limit order book built for one purpose: to be defensible under
 interview cross-examination at a trading firm. Every optimization is a frozen,
 benchmarked step with before and after numbers. Every semantic claim is backed

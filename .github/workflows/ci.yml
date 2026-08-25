@@ -1,0 +1,39 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build -j 4
+      - name: Unit and differential tests
+        run: ./build/lob_tests
+      - name: Benchmark sanity (zero allocations enforced)
+        run: |
+          ./build/bench final --ops 200000 --label ci --csv /tmp/ci.csv | tee /tmp/bench.out
+          grep -q "heap allocations in measured region: 0 " /tmp/bench.out
+      - name: Network smoke test
+        run: ./scripts/net_smoke.sh build
+
+  ubsan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure with UBSan
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DLOB_SANITIZE=undefined
+      - name: Build
+        run: cmake --build build -j 4 --target lob_tests
+      - name: Tests under UBSan
+        run: UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 ./build/lob_tests
