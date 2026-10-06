@@ -221,7 +221,7 @@ Requires CMake 3.20+ and a C++20 compiler. GoogleTest is vendored.
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 
-./build/lob_tests                      # 386 tests
+./build/lob_tests                      # 408 tests
 ./build/bench final                    # benchmark the final engine
 ./build/bench naive                    # the baseline, for contrast
 ./scripts/net_smoke.sh build           # end-to-end network test
