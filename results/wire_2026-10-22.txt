@@ -1,0 +1,15 @@
+wire-to-wire round trips through the TCP gateway on loopback, measured at the client
+command: ./build/gateway --port 9121 --udp-port 9122 & ./build/order_client --auto 20000 --port 9121
+commit: 3dbd059
+machine: Apple M5, 4 performance + 6 efficiency cores, Darwin 25.6.0
+load average at start: { 8.11 5.46 5.24 }
+power: 'AC Power'
+
+auto mode: 20000 ops acknowledged
+wire-to-wire rtt (loopback): p50=31.5us p90=40.0us p99=58.4us p99.9=90.5us max=189.5us
+  ACCEPTED      12680
+  FILLED        4183
+  PARTIAL_REST  139
+  CANCELED      1068
+  REPLACED      560
+  UNKNOWN_ID    1370

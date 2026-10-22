@@ -221,7 +221,10 @@ Three more measurements from August 2026, before runs recorded load:
   TCP): **p50 20.9 us, p99 53.8 us, p99.9 85.4 us**, measured at the client
   from send() to the last byte of the exec report. The engine core is 28 ns;
   the kernel round trip is ~750x that, which is the whole argument for
-  kernel-bypass networking in production.
+  kernel-bypass networking in production. Re-measured on 2026-10-22 through
+  the current gateway (with per-connection order ownership), under a load
+  average of 8.1: p50 31.5 us, p99 58.4 us, p99.9 90.5 us
+  (`results/wire_2026-10-22.txt`).
 
 ## Benchmark methodology
 
