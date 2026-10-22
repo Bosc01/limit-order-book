@@ -15,6 +15,9 @@
 //     any malformed byte poisons the connection and it is dropped
 //   * the participant id (owner) used for self-trade prevention is ASSIGNED
 //     by the gateway per connection -- a client cannot spoof someone else's
+//   * order ids are scoped per connection and mapped to engine ids the
+//     gateway assigns -- a client can cancel or amend only its own orders,
+//     and another client's live id answers exactly like an unused one
 //   * slow consumers are disconnected when their outbound buffer fills;
 //     a stalled client must never stall the market
 //   * SIGPIPE is ignored; a peer resetting mid-send cannot kill the process
@@ -23,20 +26,18 @@
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <poll.h>
-#include <functional>
 #include <string>
 #include <sys/socket.h>
 #include <unistd.h>
 #include <vector>
 
-#include "lob/order_book.hpp"
-#include "framing.hpp"
-#include "protocol.hpp"
+#include "gateway.hpp"
+
+using namespace lobnet;
 
 namespace {
 
@@ -44,105 +45,6 @@ volatile std::sig_atomic_t g_stop = 0;
 void on_signal(int) { g_stop = 1; }
 
 int set_nonblock(int fd) { return fcntl(fd, F_SETFL, O_NONBLOCK); }
-
-// --- market data ------------------------------------------------------------
-
-class FeedPublisher {
-public:
-    bool open(const char* ip, std::uint16_t port) {
-        fd_ = ::socket(AF_INET, SOCK_DGRAM, 0);
-        if (fd_ < 0) return false;
-        std::memset(&dest_, 0, sizeof(dest_));
-        dest_.sin_family = AF_INET;
-        dest_.sin_port   = htons(port);
-        if (inet_pton(AF_INET, ip, &dest_.sin_addr) != 1) return false;
-
-        // Multicast destination? Keep it on-host for the demo: TTL 1 and
-        // loopback enabled so a subscriber on this machine receives it.
-        const auto addr = ntohl(dest_.sin_addr.s_addr);
-        if ((addr >> 28) == 0xE) {
-            const unsigned char ttl = 1, loop = 1;
-            setsockopt(fd_, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, sizeof(ttl));
-            setsockopt(fd_, IPPROTO_IP, IP_MULTICAST_LOOP, &loop, sizeof(loop));
-        }
-        return true;
-    }
-
-    // Engine listener hook: every fill becomes a Trade message. Order ids
-    // are deliberately NOT published -- public feeds are anonymous; ids go
-    // only to the owning client via its exec report.
-    void on_trade(lob::OrderId /*taker*/, lob::OrderId /*maker*/, lob::Price px,
-                  lob::Qty qty) {
-        lobnet::TradeMsg t{next_seq(), px, qty, taker_side_};
-        std::uint8_t buf[64];
-        const auto n = lobnet::encode(buf, sizeof(buf), t);
-        if (n) send_datagram(buf, n);
-    }
-
-    void publish_book(const lob::OrderBookT<FeedPublisher>& book) {
-        lobnet::BookMsg m{};
-        m.seq = next_seq();
-        const int nb = book.top_levels(lob::Side::Bid, lobnet::kBookDepth,
-                                       m.bid_px, m.bid_qty);
-        const int na = book.top_levels(lob::Side::Ask, lobnet::kBookDepth,
-                                       m.ask_px, m.ask_qty);
-        for (int i = nb; i < lobnet::kBookDepth; ++i) m.bid_px[i] = lob::kNoPrice;
-        for (int i = na; i < lobnet::kBookDepth; ++i) m.ask_px[i] = lob::kNoPrice;
-        std::uint8_t buf[256];
-        const auto n = lobnet::encode(buf, sizeof(buf), m);
-        if (n) send_datagram(buf, n);
-    }
-
-    // Engine listener hook: the engine removed a resting order without its
-    // owner asking (STP CancelResting). The owner must be told, or the
-    // order silently vanishes from their point of view.
-    void on_cancel(lob::OrderId id, lob::Owner owner) {
-        if (on_unsolicited_cancel) on_unsolicited_cancel(id, owner);
-    }
-
-    // The taker side of the op currently being processed (trades inherit it).
-    void set_taker_side(lob::Side s) { taker_side_ = s; }
-
-    std::function<void(lob::OrderId, lob::Owner)> on_unsolicited_cancel;
-
-private:
-    std::uint64_t next_seq() { return ++seq_; }
-
-    void send_datagram(const std::uint8_t* p, std::size_t n) {
-        // Best effort by design: UDP either delivers or it does not, and the
-        // publisher never blocks on subscribers.
-        (void)::sendto(fd_, p, n, 0, reinterpret_cast<sockaddr*>(&dest_),
-                       sizeof(dest_));
-    }
-
-    int           fd_ = -1;
-    sockaddr_in   dest_{};
-    std::uint64_t seq_ = 0;
-    lob::Side     taker_side_ = lob::Side::Bid;
-};
-
-using Engine = lob::OrderBookT<FeedPublisher>;
-
-// --- per-connection state ---------------------------------------------------
-
-struct Connection {
-    int                  fd = -1;
-    lob::Owner           owner = 0;
-    lobnet::FrameBuffer  frames;
-    std::vector<std::uint8_t> outbox; // pending bytes; capped, see below
-    bool                 dead = false;
-};
-
-constexpr std::size_t kMaxOutbox = 64 * 1024;
-
-void queue_send(Connection& c, const std::uint8_t* p, std::size_t n) {
-    if (c.outbox.size() + n > kMaxOutbox) {
-        // Slow consumer: killing it protects everyone else's latency.
-        c.dead = true;
-        return;
-    }
-    c.outbox.insert(c.outbox.end(), p, p + n);
-}
 
 void flush_outbox(Connection& c) {
     while (!c.outbox.empty()) {
@@ -155,78 +57,6 @@ void flush_outbox(Connection& c) {
         c.dead = true; // real error
         return;
     }
-}
-
-void send_exec(Connection& c, lob::OrderId id, lob::Qty filled,
-               lobnet::ExecStatus st) {
-    std::uint8_t buf[64];
-    const auto n = lobnet::encode(buf, sizeof(buf),
-                                  lobnet::ExecReportMsg{id, filled, st});
-    if (n) queue_send(c, buf, n);
-}
-
-lobnet::ExecStatus submit_status(const lob::SubmitResult& r, lob::Qty want) {
-    if (r.rejected) return lobnet::ExecStatus::Rejected;
-    if (r.filled == want) return lobnet::ExecStatus::Filled;
-    if (r.rested)
-        return r.filled ? lobnet::ExecStatus::PartialRest
-                        : lobnet::ExecStatus::Accepted;
-    return r.filled ? lobnet::ExecStatus::PartialDone
-                    : lobnet::ExecStatus::Canceled; // e.g. IOC with no cross
-}
-
-// --- inbound frame -> engine op --> exec report -----------------------------
-
-void handle_frame(Engine& book, FeedPublisher& feed, Connection& c,
-                  const std::uint8_t* body, std::size_t len) {
-    const auto type = lobnet::peek_type(body, len);
-    if (!type) { c.dead = true; return; }
-
-    switch (*type) {
-        case lobnet::MsgType::NewOrder: {
-            const auto m = lobnet::decode_new_order(body, len);
-            if (!m) { c.dead = true; return; }
-            feed.set_taker_side(m->side);
-            const auto r =
-                book.submit_limit(m->id, m->side, m->px, m->qty, m->tif, c.owner);
-            send_exec(c, m->id, r.filled, submit_status(r, m->qty));
-            break;
-        }
-        case lobnet::MsgType::Market: {
-            const auto m = lobnet::decode_market(body, len);
-            if (!m) { c.dead = true; return; }
-            feed.set_taker_side(m->side);
-            const auto filled = book.submit_market(m->id, m->side, m->qty, c.owner);
-            send_exec(c, m->id, filled,
-                      filled ? lobnet::ExecStatus::Filled
-                             : lobnet::ExecStatus::Canceled);
-            break;
-        }
-        case lobnet::MsgType::Cancel: {
-            const auto m = lobnet::decode_cancel(body, len);
-            if (!m) { c.dead = true; return; }
-            send_exec(c, m->id, 0,
-                      book.cancel(m->id) ? lobnet::ExecStatus::Canceled
-                                         : lobnet::ExecStatus::Unknown);
-            break;
-        }
-        case lobnet::MsgType::Modify: {
-            const auto m = lobnet::decode_modify(body, len);
-            if (!m) { c.dead = true; return; }
-            const auto r = book.modify(m->id, m->new_px, m->new_qty);
-            // Three distinct answers, as real venues send: replaced; amend
-            // rejected but the order is still live; or the id is gone.
-            send_exec(c, m->id, r.filled,
-                      r.ok    ? lobnet::ExecStatus::Replaced
-                      : r.found ? lobnet::ExecStatus::Rejected
-                                : lobnet::ExecStatus::Unknown);
-            break;
-        }
-        default:
-            c.dead = true; // client->gateway direction never carries other types
-            return;
-    }
-    feed.publish_book(book);
 }
 
 int make_listener(std::uint16_t port) {
@@ -289,11 +119,11 @@ int main(int argc, char** argv) {
     lob::Owner next_owner = 1;
 
     // Route STP kill notifications back to the owning client as an
-    // unsolicited cancel report.
-    feed.on_unsolicited_cancel = [&conns](lob::OrderId id, lob::Owner owner) {
+    // unsolicited cancel report, under the client's own order id.
+    feed.on_unsolicited_cancel = [&conns](lob::OrderId client, lob::Owner owner) {
         for (auto& c : conns)
             if (c.owner == owner && !c.dead) {
-                send_exec(c, id, 0, lobnet::ExecStatus::Canceled);
+                send_exec(c, client, 0, lobnet::ExecStatus::Canceled);
                 break;
             }
     };

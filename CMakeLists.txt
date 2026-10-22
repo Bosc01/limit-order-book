@@ -73,6 +73,7 @@ add_executable(lob_tests
   tests/pool_test.cpp
   tests/id_map_test.cpp
   tests/net_protocol_test.cpp
+  tests/gateway_test.cpp
   tests/differential_test.cpp
   tests/property_test.cpp
 )

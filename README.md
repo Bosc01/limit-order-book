@@ -19,7 +19,7 @@ in [Benchmark](#benchmark).
 | mean latency | 31.5 ns |
 | p50 / p99 / p99.9 | 41 / 84 / 250 ns |
 | heap allocations per op | zero, in every run |
-| tests | 414, at 98.0% line coverage (llvm-cov) |
+| tests | 418, at 98.2% line coverage (llvm-cov) |
 
 These were measured with two other processes each holding a core. In August
 2026, before the benchmark recorded load, the same engine on the same
@@ -253,7 +253,7 @@ Three more measurements from August 2026, before runs recorded load:
 
 ## Correctness
 
-414 GoogleTest cases across 22 suites (98.0% line coverage, 98.8% function
+418 GoogleTest cases across 23 suites (98.2% line coverage, 99.2% function
 coverage by llvm-cov over the engines and wire protocol):
 
 * **A typed semantics suite runs identically against all seven engines.** The
@@ -321,7 +321,11 @@ hostile. Frames are length-capped and field-decoded with bounds checks, bad
 input poisons and drops the connection, participant ids for self-trade
 prevention are assigned by the gateway (a client cannot spoof another's), slow
 consumers are disconnected before they can stall the market, and order ids
-never appear on the public feed.
+never appear on the public feed. Order ownership is enforced per connection:
+each connection has its own order id space, which the gateway maps to engine
+ids it assigns itself, so a client can cancel or amend only its own orders. An
+id that belongs to another client gets the same answer as an id nobody uses,
+so a client cannot probe for other clients' live orders.
 
 ## Build and run
 
@@ -331,7 +335,7 @@ Requires CMake 3.20+ and a C++20 compiler. GoogleTest is vendored.
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 
-./build/lob_tests                      # 414 tests
+./build/lob_tests                      # 418 tests
 ./scripts/bench_report.sh build        # the Benchmark table: 5 runs, medians
 ./build/bench final                    # one benchmark run of the final engine
 ./build/bench naive                    # the baseline, for contrast
