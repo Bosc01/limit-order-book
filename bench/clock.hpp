@@ -41,6 +41,7 @@ inline std::uint64_t rdticks() {
 struct ClockCalibration {
     double        ns_per_tick;         // measured against steady_clock
     std::uint64_t read_overhead_ticks; // median of back-to-back read deltas
+    double        resolution_ns;       // average step between distinct readings
 };
 
 // Calibrate ticks -> ns by running both clocks across a ~200 ms busy-wait
@@ -69,7 +70,21 @@ inline ClockCalibration calibrate_clock() {
         x = b - a;
     }
     std::nth_element(d.begin(), d.begin() + d.size() / 2, d.end());
-    return {ns_per_tick, d[d.size() / 2]};
+
+    // Resolution is not the unit: Apple Silicon reports the counter in 1 ns
+    // units but advances it in steps of about 41.7 ns. Average the step over
+    // 1000 changes so no single latency claim outruns what the clock can see.
+    std::uint64_t first = rdticks();
+    while (rdticks() == first) { /* align to a step boundary */ }
+    first = rdticks();
+    std::uint64_t last = first;
+    for (int changes = 0; changes < 1000;) {
+        const std::uint64_t now = rdticks();
+        if (now != last) { last = now; ++changes; }
+    }
+    const double resolution_ns =
+        static_cast<double>(last - first) / 1000.0 * ns_per_tick;
+    return {ns_per_tick, d[d.size() / 2], resolution_ns};
 }
 
 } // namespace bench

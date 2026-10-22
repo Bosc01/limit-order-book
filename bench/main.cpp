@@ -1,6 +1,8 @@
 // Benchmark driver. Usage:
 //   bench [engine] [--ops N] [--warmup N] [--seed S] [--label STR] [--csv PATH]
-// Engines: naive (more added in later phases).
+//         [--threads N] [--pool SLOTS] [--idmap SLOTS]
+// Engines: naive v1 v2 v3 v4 v5 final. Prints the machine it ran on first,
+// so every result carries its context.
 #include <atomic>
 #include <cmath>
 #include <cstdio>
@@ -8,9 +10,14 @@
 #include <cstring>
 #include <memory>
 #include <string>
+#include <fstream>
 #include <sys/stat.h>
+#include <sys/utsname.h>
 #include <thread>
 #include <vector>
+#if defined(__APPLE__)
+#include <sys/sysctl.h>
+#endif
 
 #include "alloc_count.hpp"
 #include "clock.hpp"
@@ -122,8 +129,8 @@ template <class Book>
 int run_benchmark_sharded(const Config& cfg) {
     const auto cal = bench::calibrate_clock();
     const int  T   = cfg.threads;
-    std::printf("clock: %.4f ns/tick; %d shards, %zu measured ops each\n",
-                cal.ns_per_tick, T, cfg.ops);
+    std::printf("clock: resolution %.1f ns; %d shards, %zu measured ops each\n",
+                cal.resolution_ns, T, cfg.ops);
 
     struct Shard {
         std::vector<bench::Op> ops;
@@ -191,9 +198,9 @@ template <class Book>
 int run_benchmark(const Config& cfg) {
     if (cfg.threads > 1) return run_benchmark_sharded<Book>(cfg);
     const auto cal = bench::calibrate_clock();
-    std::printf("clock: %.4f ns/tick (%.1f MHz), read overhead ~%llu ticks (%.0f ns)\n",
-                cal.ns_per_tick, 1000.0 / cal.ns_per_tick,
-                (unsigned long long)cal.read_overhead_ticks,
+    std::printf("clock: %.4f ns per counter unit, resolution %.1f ns, "
+                "read overhead ~%.0f ns\n",
+                cal.ns_per_tick, cal.resolution_ns,
                 cal.read_overhead_ticks * cal.ns_per_tick);
 
     bench::WorkloadGen gen(cfg.seed);
@@ -243,8 +250,54 @@ int run_benchmark(const Config& cfg) {
 
 } // namespace
 
+std::string cpu_model() {
+#if defined(__APPLE__)
+    char buf[256];
+    std::size_t len = sizeof(buf);
+    if (sysctlbyname("machdep.cpu.brand_string", buf, &len, nullptr, 0) == 0) return buf;
+#elif defined(__linux__)
+    std::ifstream f("/proc/cpuinfo");
+    for (std::string line; std::getline(f, line);)
+        if (line.rfind("model name", 0) == 0) return line.substr(line.find(':') + 2);
+#endif
+    return "unknown CPU";
+}
+
+// Core layout matters for reading sharded results: on Apple Silicon the
+// efficiency cores are much slower than the performance cores.
+std::string core_layout() {
+    std::string s = std::to_string(std::thread::hardware_concurrency()) + " logical cores";
+#if defined(__APPLE__)
+    int perf = 0, eff = 0;
+    std::size_t len = sizeof(int);
+    if (sysctlbyname("hw.perflevel0.logicalcpu", &perf, &len, nullptr, 0) == 0 &&
+        sysctlbyname("hw.perflevel1.logicalcpu", &eff, &len, nullptr, 0) == 0)
+        s += " (" + std::to_string(perf) + " performance, " + std::to_string(eff) + " efficiency)";
+#endif
+    return s;
+}
+
+// The load average is printed because other work on the machine changes
+// the numbers; a result is only comparable to one taken under similar load.
+void print_machine() {
+    utsname u{};
+    uname(&u);
+    double load[3] = {0, 0, 0};
+    getloadavg(load, 3);
+#if defined(__OPTIMIZE__)
+    const char* opt = "optimized";
+#else
+    const char* opt = "NOT optimized";
+#endif
+    std::printf("machine: %s, %s, %s %s %s\n", cpu_model().c_str(),
+                core_layout().c_str(), u.sysname, u.release, u.machine);
+    std::printf("build: %s, %s; load average at start: %.2f %.2f %.2f\n",
+                __VERSION__, opt, load[0], load[1], load[2]);
+}
+
 int main(int argc, char** argv) {
     const Config cfg = parse_args(argc, argv);
+    print_machine();
     if (cfg.engine == "naive") return run_benchmark<lob::NaiveBook>(cfg);
     if (cfg.engine == "v1")    return run_benchmark<lob::v1::Book>(cfg);
     if (cfg.engine == "v2")    return run_benchmark<lob::v2::Book>(cfg);
