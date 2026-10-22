@@ -74,6 +74,7 @@ add_executable(lob_tests
   tests/id_map_test.cpp
   tests/net_protocol_test.cpp
   tests/differential_test.cpp
+  tests/property_test.cpp
 )
 target_include_directories(lob_tests PRIVATE include bench .)
 target_compile_options(lob_tests PRIVATE -O1 -g -Wall -Wextra)

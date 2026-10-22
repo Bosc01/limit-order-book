@@ -18,7 +18,7 @@ Headline numbers on Apple M5, single thread, 2M-operation replay (seed 42,
 | p50 / p90 / p99 / p99.9 | 41 / 42 / 84 / 166 ns |
 | heap allocations per op | 0.000 (measured every run) |
 | cancel, naive baseline vs final | 17.6 us vs 24 ns (~740x) |
-| line coverage (llvm-cov) | 97.7% |
+| line coverage (llvm-cov) | 98.0% |
 
 ## Architecture
 
@@ -199,7 +199,7 @@ Three more measurements, run after the single-thread story was settled:
 
 ## Correctness
 
-408 GoogleTest cases across 21 suites (97.7% line coverage, 99.2% function
+414 GoogleTest cases across 22 suites (98.0% line coverage, 98.8% function
 coverage by llvm-cov over the engines and wire protocol):
 
 * **A typed semantics suite runs identically against all seven engines.** The
@@ -211,6 +211,16 @@ coverage by llvm-cov over the engines and wire protocol):
   best bid/ask, and periodic full structural audits (`check_invariants()`
   walks every list link, level total, bitmap bit, and id-map entry). The
   deepest pair does 1M operations.
+* **Property tests** (`tests/property_test.cpp`): seeded random sequences of
+  limit, market, cancel, and modify orders, 100,000 operations per
+  self-trade policy, checked after every single operation against a model
+  the test keeps itself. The book is never crossed or locked, the cached best
+  prices match the model, every price level holds exactly the modeled
+  quantity, and a ledger proves quantity conservation: everything that came
+  to rest is still resting, traded, or canceled. Each trade must hit a live
+  order on the other side at that order's price, and the same seed run twice
+  must produce identical results and trades. Each property was checked by
+  injecting a bug into the engine and confirming the tests fail.
 * **Feature suites**: TIF x STP interactions (including FOK pre-check
   atomicity under both STP modes), duplicate id rejection, id reuse after
   cancel and after fill, band edges, bitmap scans across word boundaries,
