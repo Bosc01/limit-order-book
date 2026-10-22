@@ -95,7 +95,8 @@ assuming the hash spreads ids evenly. The d/64 term is the bitmap scan, which te
 touch, and the worst case is B/64 = 512 word reads. Pool growth and id-map
 rehash are O(n) events that only fire when the engine is undersized; the
 100M-operation endurance run below, sized for its session, recorded zero
-of either.
+of either, re-checked with every allocation path counted in
+`results/endurance_2026-10-22.txt`.
 
 **Why a flat ladder and not a tree or heap.** Prices are integers on a tick
 grid inside a bounded band, so an array index already sorts them. The

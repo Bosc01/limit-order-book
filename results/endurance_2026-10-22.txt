@@ -1,0 +1,17 @@
+machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), optimized; load average at start: 7.49 5.82 4.72
+clock: 1.0000 ns per counter unit, resolution 41.7 ns, read overhead ~0 ns
+workload: 101000000 ops (1000000 warmup + 100000000 measured), seed 42
+
+engine=final label=endurance-2026-10-22
+  kind         count     mean_ns      p50      p90      p99    p99.9        max
+  limit     55002981          78       42      125      250     1958    3547889
+  market     4999140          78       42      125      250     2000    1126567
+  cancel    29999825          59       42       84      208     1917    3265631
+  modify     9998054          68       42      125      250     1958    4125956
+  ALL      100000000          71       42      125      250     1958    4125956
+
+throughput: 11837981 ops/s (8.45 s wall for 100000000 ops)
+heap allocations in measured region: 0 (0.000 per op)
+resting orders at end: 328521
+csv appended: results/endurance_2026-10-22.csv
