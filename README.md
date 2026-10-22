@@ -352,10 +352,13 @@ cmake -B build-san -DLOB_SANITIZE=address,undefined
 cmake --build build-san --target lob_tests && ./build-san/lob_tests
 ```
 
-`bench` options: engine name (`naive v1 v2 v3 v4 v5 final`), `--ops N`,
-`--warmup N`, `--seed S`, `--label STR`, `--csv PATH`, `--threads N` (one
-engine per thread), `--pool SLOTS` and `--idmap SLOTS` (final engine
-capacity). Results append as CSV for charting.
+`bench` options: engine name (`naive v1 v2 v3 v4 v5 final`), `--ops N`
+(default 1,000,000), `--warmup N` (default 100,000), `--seed S`,
+`--label STR`, `--csv PATH`, `--json PATH` (one file holding the whole run:
+machine, compiler, flags, load, timer resolution, throughput, allocations,
+and percentiles per operation type), `--threads N` (one engine per thread),
+`--pool SLOTS` and `--idmap SLOTS` (final engine capacity). Results also
+append as CSV for charting.
 
 ## Repository layout
 

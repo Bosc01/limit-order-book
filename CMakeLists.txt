@@ -39,6 +39,12 @@ set(LOB_SANITIZE "" CACHE STRING "sanitizers for test targets, e.g. address,unde
 add_executable(bench bench/main.cpp bench/alloc_count.cpp)
 target_include_directories(bench PRIVATE include bench)
 target_compile_options(bench PRIVATE ${LOB_HOT_FLAGS})
+# The benchmark prints and records the flags it was built with.
+string(TOUPPER "${CMAKE_BUILD_TYPE}" LOB_BUILD_TYPE_UPPER)
+string(JOIN " " LOB_BENCH_FLAGS -std=c++${CMAKE_CXX_STANDARD} ${CMAKE_CXX_FLAGS}
+       ${CMAKE_CXX_FLAGS_${LOB_BUILD_TYPE_UPPER}} ${LOB_HOT_FLAGS})
+target_compile_definitions(bench PRIVATE
+  "LOB_BUILD_FLAGS=\"${LOB_BENCH_FLAGS}\"" "LOB_BUILD_TYPE=\"${CMAKE_BUILD_TYPE}\"")
 
 # ---- tests ----------------------------------------------------------------
 # GoogleTest: use a local checkout in third_party/ when present (offline

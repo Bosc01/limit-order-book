@@ -1,13 +1,15 @@
 // Benchmark driver. Usage:
 //   bench [engine] [--ops N] [--warmup N] [--seed S] [--label STR] [--csv PATH]
-//         [--threads N] [--pool SLOTS] [--idmap SLOTS]
-// Engines: naive v1 v2 v3 v4 v5 final. Prints the machine it ran on first,
-// so every result carries its context.
+//         [--json PATH] [--threads N] [--pool SLOTS] [--idmap SLOTS]
+// Engines: naive v1 v2 v3 v4 v5 final. Prints the machine and build it ran
+// on first, so every result carries its context; --json writes the whole
+// run, context included, as one file.
 #include <atomic>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <memory>
 #include <string>
 #include <fstream>
@@ -37,11 +39,12 @@ namespace {
 
 struct Config {
     std::string engine  = "naive";
-    std::size_t ops     = 200'000; // measured ops PER SHARD
-    std::size_t warmup  = 20'000;
+    std::size_t ops     = 1'000'000; // measured ops PER SHARD
+    std::size_t warmup  = 100'000;
     std::uint64_t seed  = 42;
     std::string label   = "baseline";
     std::string csv     = "results/bench.csv";
+    std::string json;                // empty: no JSON record
     int         threads = 1; // shards; each runs its own engine instance
     std::size_t pool    = 1u << 17;          // final engine: order-pool slots
     std::size_t idmap   = std::size_t{1} << 18; // final engine: id-map slots
@@ -63,6 +66,7 @@ Config parse_args(int argc, char** argv) {
         else if (a == "--idmap")  c.idmap  = std::strtoull(next(), nullptr, 10);
         else if (a == "--label")  c.label  = next();
         else if (a == "--csv")    c.csv    = next();
+        else if (a == "--json")   c.json   = next();
         else if (a[0] != '-')     c.engine = a;
         else { std::fprintf(stderr, "unknown flag %s\n", a.c_str()); std::exit(1); }
     }
@@ -105,6 +109,140 @@ void append_csv(const Config& cfg, const char* kind, const bench::Summary& s,
     if (throughput > 0) std::fprintf(f, "%.0f\n", throughput);
     else                std::fprintf(f, "\n");
     std::fclose(f);
+}
+
+#ifndef LOB_BUILD_FLAGS
+#define LOB_BUILD_FLAGS "not recorded (built outside CMake)"
+#endif
+#ifndef LOB_BUILD_TYPE
+#define LOB_BUILD_TYPE "unknown"
+#endif
+
+// Everything a result needs next to it to be interpreted: other work on
+// the machine changes the numbers, so a run is only comparable to one taken
+// on the same hardware, build, and similar load.
+struct Machine {
+    std::string cpu, cores, os, compiler, flags, build_type;
+    bool        optimized = false;
+    double      load[3] = {0, 0, 0};
+};
+
+std::string cpu_model() {
+#if defined(__APPLE__)
+    char buf[256];
+    std::size_t len = sizeof(buf);
+    if (sysctlbyname("machdep.cpu.brand_string", buf, &len, nullptr, 0) == 0) return buf;
+#elif defined(__linux__)
+    std::ifstream f("/proc/cpuinfo");
+    for (std::string line; std::getline(f, line);)
+        if (line.rfind("model name", 0) == 0) return line.substr(line.find(':') + 2);
+#endif
+    return "unknown CPU";
+}
+
+// Core layout matters for reading sharded results: on Apple Silicon the
+// efficiency cores are much slower than the performance cores.
+std::string core_layout() {
+    std::string s = std::to_string(std::thread::hardware_concurrency()) + " logical cores";
+#if defined(__APPLE__)
+    int perf = 0, eff = 0;
+    std::size_t len = sizeof(int);
+    if (sysctlbyname("hw.perflevel0.logicalcpu", &perf, &len, nullptr, 0) == 0 &&
+        sysctlbyname("hw.perflevel1.logicalcpu", &eff, &len, nullptr, 0) == 0)
+        s += " (" + std::to_string(perf) + " performance, " + std::to_string(eff) + " efficiency)";
+#endif
+    return s;
+}
+
+Machine gather_machine() {
+    Machine m;
+    utsname u{};
+    uname(&u);
+    m.cpu        = cpu_model();
+    m.cores      = core_layout();
+    m.os         = std::string(u.sysname) + " " + u.release + " " + u.machine;
+    m.compiler   = __VERSION__;
+    m.flags      = LOB_BUILD_FLAGS;
+    m.build_type = LOB_BUILD_TYPE;
+#if defined(__OPTIMIZE__)
+    m.optimized = true;
+#endif
+    getloadavg(m.load, 3);
+    return m;
+}
+
+void print_machine(const Machine& m) {
+    std::printf("machine: %s, %s, %s\n", m.cpu.c_str(), m.cores.c_str(), m.os.c_str());
+    std::printf("build: %s, %s, %s\n", m.compiler.c_str(), m.build_type.c_str(),
+                m.optimized ? "optimized" : "NOT optimized");
+    std::printf("flags: %s\n", m.flags.c_str());
+    std::printf("load average at start: %.2f %.2f %.2f\n", m.load[0], m.load[1], m.load[2]);
+}
+
+// --- JSON record of one run ---------------------------------------------
+// Hand-written on purpose: a handful of fields does not justify a JSON
+// library dependency. Strings come from the machine and the command line,
+// so they are escaped.
+
+std::string json_str(const std::string& v) {
+    std::string out = "\"";
+    for (const char ch : v) {
+        if (ch == '"' || ch == '\\') { out += '\\'; out += ch; }
+        else if (static_cast<unsigned char>(ch) < 0x20) out += ' ';
+        else out += ch;
+    }
+    return out + "\"";
+}
+
+void json_summary(FILE* f, const char* name, const bench::Summary& s, bool last) {
+    std::fprintf(f, "    %s: {\"count\": %zu, \"mean_ns\": %.1f, \"p50_ns\": %llu, "
+                    "\"p90_ns\": %llu, \"p99_ns\": %llu, \"p999_ns\": %llu, \"max_ns\": %llu}%s\n",
+                 json_str(name).c_str(), s.count, s.mean_ns,
+                 (unsigned long long)s.p50, (unsigned long long)s.p90,
+                 (unsigned long long)s.p99, (unsigned long long)s.p999,
+                 (unsigned long long)s.max, last ? "" : ",");
+}
+
+struct RunRecord {
+    double        throughput = 0, wall_seconds = 0;
+    std::uint64_t heap_allocations = 0;
+    std::size_t   resting_at_end = 0;
+    bench::Summary all, per_kind[bench::kNumOpKinds];
+};
+
+bool write_json(const Config& cfg, const Machine& m, const bench::ClockCalibration& cal,
+                const RunRecord& r) {
+    FILE* f = std::fopen(cfg.json.c_str(), "w");
+    if (!f) { std::perror(("open " + cfg.json).c_str()); return false; }
+    char when[32];
+    const std::time_t now = std::time(nullptr);
+    std::strftime(when, sizeof(when), "%Y-%m-%dT%H:%M:%SZ", std::gmtime(&now));
+    std::fprintf(f, "{\n");
+    std::fprintf(f, "  \"name\": %s,\n  \"engine\": %s,\n  \"recorded_utc\": %s,\n",
+                 json_str(cfg.label).c_str(), json_str(cfg.engine).c_str(), json_str(when).c_str());
+    std::fprintf(f, "  \"seed\": %llu,\n  \"measured_ops\": %zu,\n  \"warmup_ops\": %zu,\n",
+                 (unsigned long long)cfg.seed, cfg.ops, cfg.warmup);
+    std::fprintf(f, "  \"machine\": {\"cpu\": %s, \"cores\": %s, \"os\": %s, "
+                    "\"load_average\": [%.2f, %.2f, %.2f]},\n",
+                 json_str(m.cpu).c_str(), json_str(m.cores).c_str(), json_str(m.os).c_str(),
+                 m.load[0], m.load[1], m.load[2]);
+    std::fprintf(f, "  \"build\": {\"compiler\": %s, \"build_type\": %s, \"optimized\": %s, "
+                    "\"flags\": %s},\n",
+                 json_str(m.compiler).c_str(), json_str(m.build_type).c_str(),
+                 m.optimized ? "true" : "false", json_str(m.flags).c_str());
+    std::fprintf(f, "  \"timer\": {\"ns_per_unit\": %.4f, \"resolution_ns\": %.1f},\n",
+                 cal.ns_per_tick, cal.resolution_ns);
+    std::fprintf(f, "  \"throughput_ops_per_s\": %.0f,\n  \"wall_seconds\": %.4f,\n",
+                 r.throughput, r.wall_seconds);
+    std::fprintf(f, "  \"heap_allocations\": %llu,\n  \"resting_orders_at_end\": %zu,\n",
+                 (unsigned long long)r.heap_allocations, r.resting_at_end);
+    std::fprintf(f, "  \"latency\": {\n");
+    json_summary(f, "all", r.all, false);
+    for (int k = 0; k < bench::kNumOpKinds; ++k)
+        json_summary(f, kind_name(static_cast<bench::OpKind>(k)), r.per_kind[k],
+                     k == bench::kNumOpKinds - 1);
+    std::fprintf(f, "  }\n}\n");
+    return std::fclose(f) == 0;
 }
 
 // The final engine takes capacity parameters (pool slots, id-map slots) so
@@ -195,8 +333,14 @@ int run_benchmark_sharded(const Config& cfg) {
 }
 
 template <class Book>
-int run_benchmark(const Config& cfg) {
-    if (cfg.threads > 1) return run_benchmark_sharded<Book>(cfg);
+int run_benchmark(const Config& cfg, const Machine& machine) {
+    if (cfg.threads > 1) {
+        if (!cfg.json.empty()) {
+            std::fprintf(stderr, "--json records single-engine runs; drop --threads\n");
+            return 1;
+        }
+        return run_benchmark_sharded<Book>(cfg);
+    }
     const auto cal = bench::calibrate_clock();
     std::printf("clock: %.4f ns per counter unit, resolution %.1f ns, "
                 "read overhead ~%.0f ns\n",
@@ -227,17 +371,23 @@ int run_benchmark(const Config& cfg) {
 
     const double throughput = cfg.ops / run.wall_seconds;
 
+    RunRecord rec;
+    rec.throughput       = throughput;
+    rec.wall_seconds     = run.wall_seconds;
+    rec.heap_allocations = allocs;
+    rec.resting_at_end   = book.resting_orders();
+
     std::printf("\nengine=%s label=%s\n", cfg.engine.c_str(), cfg.label.c_str());
     std::printf("  %-8s %9s  %10s %8s %8s %8s %8s %10s\n",
                 "kind", "count", "mean_ns", "p50", "p90", "p99", "p99.9", "max");
     for (int k = 0; k < bench::kNumOpKinds; ++k) {
-        auto s = bench::summarize(per_kind[k]);
-        print_row(kind_name(static_cast<bench::OpKind>(k)), s);
-        append_csv(cfg, kind_name(static_cast<bench::OpKind>(k)), s, 0);
+        rec.per_kind[k] = bench::summarize(per_kind[k]);
+        print_row(kind_name(static_cast<bench::OpKind>(k)), rec.per_kind[k]);
+        append_csv(cfg, kind_name(static_cast<bench::OpKind>(k)), rec.per_kind[k], 0);
     }
-    auto s_all = bench::summarize(all);
-    print_row("ALL", s_all);
-    append_csv(cfg, "ALL", s_all, throughput);
+    rec.all = bench::summarize(all);
+    print_row("ALL", rec.all);
+    append_csv(cfg, "ALL", rec.all, throughput);
 
     std::printf("\nthroughput: %.0f ops/s (%.2f s wall for %zu ops)\n",
                 throughput, run.wall_seconds, cfg.ops);
@@ -245,66 +395,26 @@ int run_benchmark(const Config& cfg) {
                 (unsigned long long)allocs, double(allocs) / cfg.ops);
     std::printf("resting orders at end: %zu\n", book.resting_orders());
     std::printf("csv appended: %s\n", cfg.csv.c_str());
+    if (!cfg.json.empty()) {
+        if (!write_json(cfg, machine, cal, rec)) return 1;
+        std::printf("json written: %s\n", cfg.json.c_str());
+    }
     return 0;
 }
 
 } // namespace
 
-std::string cpu_model() {
-#if defined(__APPLE__)
-    char buf[256];
-    std::size_t len = sizeof(buf);
-    if (sysctlbyname("machdep.cpu.brand_string", buf, &len, nullptr, 0) == 0) return buf;
-#elif defined(__linux__)
-    std::ifstream f("/proc/cpuinfo");
-    for (std::string line; std::getline(f, line);)
-        if (line.rfind("model name", 0) == 0) return line.substr(line.find(':') + 2);
-#endif
-    return "unknown CPU";
-}
-
-// Core layout matters for reading sharded results: on Apple Silicon the
-// efficiency cores are much slower than the performance cores.
-std::string core_layout() {
-    std::string s = std::to_string(std::thread::hardware_concurrency()) + " logical cores";
-#if defined(__APPLE__)
-    int perf = 0, eff = 0;
-    std::size_t len = sizeof(int);
-    if (sysctlbyname("hw.perflevel0.logicalcpu", &perf, &len, nullptr, 0) == 0 &&
-        sysctlbyname("hw.perflevel1.logicalcpu", &eff, &len, nullptr, 0) == 0)
-        s += " (" + std::to_string(perf) + " performance, " + std::to_string(eff) + " efficiency)";
-#endif
-    return s;
-}
-
-// The load average is printed because other work on the machine changes
-// the numbers; a result is only comparable to one taken under similar load.
-void print_machine() {
-    utsname u{};
-    uname(&u);
-    double load[3] = {0, 0, 0};
-    getloadavg(load, 3);
-#if defined(__OPTIMIZE__)
-    const char* opt = "optimized";
-#else
-    const char* opt = "NOT optimized";
-#endif
-    std::printf("machine: %s, %s, %s %s %s\n", cpu_model().c_str(),
-                core_layout().c_str(), u.sysname, u.release, u.machine);
-    std::printf("build: %s, %s; load average at start: %.2f %.2f %.2f\n",
-                __VERSION__, opt, load[0], load[1], load[2]);
-}
-
 int main(int argc, char** argv) {
-    const Config cfg = parse_args(argc, argv);
-    print_machine();
-    if (cfg.engine == "naive") return run_benchmark<lob::NaiveBook>(cfg);
-    if (cfg.engine == "v1")    return run_benchmark<lob::v1::Book>(cfg);
-    if (cfg.engine == "v2")    return run_benchmark<lob::v2::Book>(cfg);
-    if (cfg.engine == "v3")    return run_benchmark<lob::v3::Book>(cfg);
-    if (cfg.engine == "v4")    return run_benchmark<lob::v4::Book>(cfg);
-    if (cfg.engine == "v5")    return run_benchmark<lob::v5::Book>(cfg);
-    if (cfg.engine == "final") return run_benchmark<lob::OrderBook>(cfg);
+    const Config  cfg = parse_args(argc, argv);
+    const Machine m   = gather_machine();
+    print_machine(m);
+    if (cfg.engine == "naive") return run_benchmark<lob::NaiveBook>(cfg, m);
+    if (cfg.engine == "v1")    return run_benchmark<lob::v1::Book>(cfg, m);
+    if (cfg.engine == "v2")    return run_benchmark<lob::v2::Book>(cfg, m);
+    if (cfg.engine == "v3")    return run_benchmark<lob::v3::Book>(cfg, m);
+    if (cfg.engine == "v4")    return run_benchmark<lob::v4::Book>(cfg, m);
+    if (cfg.engine == "v5")    return run_benchmark<lob::v5::Book>(cfg, m);
+    if (cfg.engine == "final") return run_benchmark<lob::OrderBook>(cfg, m);
     std::fprintf(stderr,
                  "unknown engine '%s' (have: naive v1 v2 v3 v4 v5 final)\n",
                  cfg.engine.c_str());
