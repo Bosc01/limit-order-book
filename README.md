@@ -63,6 +63,52 @@ size increase re-enters as a fresh arrival, and the result distinguishes
 "unknown id" from "bad amend on a live order". Market orders support a
 CME-style protection band (cap on how far past the touch a sweep may run).
 
+### Operation costs
+
+Notation: F is the number of resting orders an incoming order touches
+(fills, or removes for self-trade prevention), L the number of price levels
+it crosses, d the number of ticks the best-price scan walks (the gap to the
+next occupied level after a cancel, or the span a crossing order sweeps),
+and B the width of the price band in ticks (32,767 by default, so the
+bitmap is 512 words per side).
+
+| Operation | Cost | Where the time goes |
+|---|---|---|
+| Add, does not cross | O(1) expected | duplicate-id probe, append at the level tail, id-map insert, set one bitmap bit |
+| Add that crosses, or market order | O(F + L + d/64) expected | constant work per fill; one bitmap scan each time the best level empties |
+| Cancel | O(1) expected, plus O(d/64) if it empties the best level | id-map lookup and erase, unlink through the order's own pointers, return the slot to the pool |
+| Modify, same or smaller size at the same price | O(1) expected | amended in place, keeps queue position |
+| Modify, any other change | cancel plus add | loses queue position, as on real venues |
+| Best bid or ask | O(1) | cached per side |
+| FOK pre-check | O(L + d/64) | sums level totals; walks individual orders only when self-trade prevention is on |
+
+"Expected" comes from the id map: linear probing with the load factor held
+at or below 0.5 averages at most 1.5 probes for a hit and 2.5 for a miss,
+assuming the hash spreads ids evenly. The d/64 term is the bitmap scan, which tests
+64 ticks per instruction; d is small when resting orders sit near the
+touch, and the worst case is B/64 = 512 word reads. Pool growth and id-map
+rehash are O(n) events that only fire when the engine is undersized; the
+100M-operation endurance run below, sized for its session, recorded zero
+of either.
+
+**Why a flat ladder and not a tree or heap.** Prices are integers on a tick
+grid inside a bounded band, so an array index already sorts them. The
+`std::map` version (`engines/book_v1.hpp`) pays O(log L) to insert a new
+level and to erase a level emptied by a cancel, chasing tree nodes scattered
+across the heap. Switching to the flat ladder took the mean from 39.9 to 36.0 ns
+and throughput from 20.5M to 22.3M ops/s (v4 to v5 in the next table,
+medians of five runs). The price is the band: orders outside it are
+rejected, and empty levels still cost memory, one 64-byte line per tick per
+side, about 2 MB per side at the default band.
+
+**Why no lazy deletion.** Lazy deletion is the workaround for a binary heap
+of prices: a heap cannot remove an element from its middle, so a canceled
+entry is marked dead and skipped when it reaches the top. Here every
+removal is already constant time. The order is unlinked through its own
+prev and next pointers, its level is reached through a back-pointer, and an
+emptied level is a cleared bit. Lazy deletion would add a dead-entry check
+to the matching loop and keep dead orders in memory, for no gain.
+
 ## The measured optimization story
 
 Seven engines share one replayable workload (seed 42). `naive` is the

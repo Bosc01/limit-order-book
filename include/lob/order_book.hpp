@@ -110,7 +110,9 @@ public:
     //   2. unlink from the level's intrusive list O(1), pointer swings
     //   3. update level aggregates                same cache line as (2)'s head/tail
     //   4. if the level emptied: clear its bitmap bit; if it held the best
-    //      cursor, scan for the new best          O(1) amortized
+    //      cursor, scan for the new best          O(d/64), d = ticks to the
+    //                                             next occupied level; at
+    //                                             most band/64 word reads
     //   5. id map erase + pool recycle            O(1), no free() call
     bool cancel(OrderId id) {
         Order** slot = orders_.find(id);
