@@ -19,7 +19,7 @@ in [Benchmark](#benchmark).
 | mean latency | 31.5 ns |
 | p50 / p99 / p99.9 | 41 / 84 / 250 ns |
 | heap allocations per op | zero, in every run |
-| tests | 418, at 98.2% line coverage (llvm-cov) |
+| tests | 419, at 98.2% line coverage (llvm-cov) |
 
 These were measured with two other processes each holding a core. In August
 2026, before the benchmark recorded load, the same engine on the same
@@ -253,7 +253,7 @@ Three more measurements from August 2026, before runs recorded load:
 
 ## Correctness
 
-418 GoogleTest cases across 23 suites (98.2% line coverage, 99.2% function
+419 GoogleTest cases across 23 suites (98.2% line coverage, 99.2% function
 coverage by llvm-cov over the engines and wire protocol):
 
 * **A typed semantics suite runs identically against all seven engines.** The
@@ -335,7 +335,7 @@ Requires CMake 3.20+ and a C++20 compiler. GoogleTest is vendored.
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 
-./build/lob_tests                      # 418 tests
+./build/lob_tests                      # 419 tests
 ./scripts/bench_report.sh build        # the Benchmark table: 5 runs, medians
 ./build/bench final                    # one benchmark run of the final engine
 ./build/bench naive                    # the baseline, for contrast

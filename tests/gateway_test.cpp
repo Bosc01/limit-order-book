@@ -173,4 +173,25 @@ TEST(GatewayOwnership, StpCancelReportsTheClientId) {
     EXPECT_EQ(book.resting_orders(), 0u);
 }
 
+TEST(GatewayOwnership, SizeDownInPlaceThenFill) {
+    Engine book;
+    FeedPublisher& feed = book.listener();
+    Connection a{.owner = 1}, b{.owner = 2};
+    request(book, a, NewOrderMsg{5, 100, 10, Side::Ask, Tif::GTC});
+
+    // Same price, smaller size: amended in place, keeping queue position. The
+    // gateway must refresh its record of the open quantity, or the fill below
+    // would leave a stale ownership entry behind.
+    EXPECT_EQ(request(book, a, ModifyMsg{5, 100, 4}).status, ExecStatus::Replaced);
+    EXPECT_EQ(book.qty_at(Side::Ask, 100), 4u);
+
+    // Filling the 4 that remain takes the order off the book; its id mapping
+    // goes with it, and A may reuse id 5.
+    EXPECT_EQ(request(book, b, MarketMsg{1, 4, Side::Bid}).status, ExecStatus::Filled);
+    EXPECT_EQ(book.resting_orders(), 0u);
+    EXPECT_EQ(feed.orders.size(), 0u);
+    EXPECT_EQ(request(book, a, NewOrderMsg{5, 100, 2, Side::Ask, Tif::GTC}).status,
+              ExecStatus::Accepted);
+}
+
 } // namespace
