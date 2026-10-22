@@ -1,7 +1,8 @@
 // Gateway order ownership: each connection has its own order id space, and
-// no client can cancel, amend, or detect another client's orders. Frames go
-// straight into handle_frame(); exec reports are read back from the
-// connection's outbox. No sockets are opened.
+// no client can cancel, amend, or detect another client's orders; a dropped
+// connection's orders leave the book with it. Frames go straight into
+// handle_frame(); exec reports are read back from the connection's outbox.
+// No sockets are opened.
 #include <gtest/gtest.h>
 
 #include <cstdint>
@@ -192,6 +193,41 @@ TEST(GatewayOwnership, SizeDownInPlaceThenFill) {
     EXPECT_EQ(feed.orders.size(), 0u);
     EXPECT_EQ(request(book, a, NewOrderMsg{5, 100, 2, Side::Ask, Tif::GTC}).status,
               ExecStatus::Accepted);
+}
+
+TEST(GatewayOwnership, DisconnectCancelsOnlyThatClientsOrders) {
+    Engine book;
+    FeedPublisher& feed = book.listener();
+    // B is the middle owner, so the cleanup must not reach A's or C's orders.
+    Connection a{.owner = 1}, b{.owner = 2}, c{.owner = 3};
+
+    request(book, a, NewOrderMsg{1, 90, 10, Side::Bid, Tif::GTC});
+    request(book, b, NewOrderMsg{1, 95, 10, Side::Bid, Tif::GTC});
+    request(book, b, NewOrderMsg{2, 105, 10, Side::Ask, Tif::GTC});
+    request(book, b, NewOrderMsg{3, 104, 5, Side::Ask, Tif::GTC});
+    request(book, c, NewOrderMsg{1, 110, 10, Side::Ask, Tif::GTC});
+
+    // B's 2 is partly filled and B's 3 fully, so only 1 and 2 still rest.
+    EXPECT_EQ(request(book, a, MarketMsg{2, 9, Side::Bid}).status, ExecStatus::Filled);
+    EXPECT_EQ(book.qty_at(Side::Ask, 105), 6u);
+    EXPECT_EQ(book.qty_at(Side::Ask, 104), 0u);
+    EXPECT_EQ(book.resting_orders(), 4u);
+
+    EXPECT_EQ(cancel_on_disconnect(book, feed, b.owner), 2u);
+    EXPECT_EQ(book.qty_at(Side::Bid, 95), 0u);
+    EXPECT_EQ(book.qty_at(Side::Ask, 105), 0u);
+    EXPECT_EQ(book.resting_orders(), 2u);
+    EXPECT_EQ(feed.orders.size(), book.resting_orders());
+
+    // A's and C's orders are untouched, and their owners still control them.
+    EXPECT_EQ(book.best_bid(), 90);
+    EXPECT_EQ(book.best_ask(), 110);
+    EXPECT_EQ(book.qty_at(Side::Bid, 90), 10u);
+    EXPECT_EQ(book.qty_at(Side::Ask, 110), 10u);
+    EXPECT_EQ(request(book, a, CancelMsg{1}).status, ExecStatus::Canceled);
+    EXPECT_EQ(request(book, c, ModifyMsg{1, 110, 4}).status, ExecStatus::Replaced);
+    EXPECT_EQ(cancel_on_disconnect(book, feed, b.owner), 0u);
+    EXPECT_EQ(feed.orders.size(), book.resting_orders());
 }
 
 } // namespace

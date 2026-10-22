@@ -19,7 +19,7 @@ in [Benchmark](#benchmark).
 | mean latency | 31.5 ns |
 | p50 / p99 / p99.9 | 41 / 84 / 250 ns |
 | heap allocations per op | zero, in every run |
-| tests | 419, at 98.2% line coverage (llvm-cov) |
+| tests | 420, at 98.2% line coverage (llvm-cov) |
 
 These were measured with two other processes each holding a core. In August
 2026, before the benchmark recorded load, the same engine on the same
@@ -253,7 +253,7 @@ Three more measurements from August 2026, before runs recorded load:
 
 ## Correctness
 
-419 GoogleTest cases across 23 suites (98.2% line coverage, 99.2% function
+420 GoogleTest cases across 23 suites (98.2% line coverage, 99.2% function
 coverage by llvm-cov over the engines and wire protocol):
 
 * **A typed semantics suite runs identically against all seven engines.** The
@@ -325,7 +325,10 @@ never appear on the public feed. Order ownership is enforced per connection:
 each connection has its own order id space, which the gateway maps to engine
 ids it assigns itself, so a client can cancel or amend only its own orders. An
 id that belongs to another client gets the same answer as an id nobody uses,
-so a client cannot probe for other clients' live orders.
+so a client cannot probe for other clients' live orders. When a connection
+drops, for any reason including a slow-consumer disconnect, the gateway
+cancels every order it still has resting and publishes one book snapshot, so
+no order is left on the book that nobody can cancel.
 
 ## Build and run
 
@@ -335,7 +338,7 @@ Requires CMake 3.20+ and a C++20 compiler. GoogleTest is vendored.
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 
-./build/lob_tests                      # 419 tests
+./build/lob_tests                      # 420 tests
 ./scripts/bench_report.sh build        # the Benchmark table: 5 runs, medians
 ./build/bench final                    # one benchmark run of the final engine
 ./build/bench naive                    # the baseline, for contrast

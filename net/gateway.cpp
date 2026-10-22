@@ -18,6 +18,8 @@
 //   * order ids are scoped per connection and mapped to engine ids the
 //     gateway assigns -- a client can cancel or amend only its own orders,
 //     and another client's live id answers exactly like an unused one
+//   * a dropped connection's resting orders are canceled -- nobody else
+//     can name them, so none is left on the book without an owner
 //   * slow consumers are disconnected when their outbound buffer fills;
 //     a stalled client must never stall the market
 //   * SIGPIPE is ignored; a peer resetting mid-send cannot kill the process
@@ -187,7 +189,9 @@ int main(int argc, char** argv) {
 
         for (std::size_t i = conns.size(); i-- > 0;) {
             if (conns[i].dead) {
-                std::printf("gateway: client %u disconnected\n", conns[i].owner);
+                const std::size_t n = cancel_on_disconnect(book, feed, conns[i].owner);
+                std::printf("gateway: client %u disconnected, %zu orders canceled\n",
+                            conns[i].owner, n);
                 ::close(conns[i].fd);
                 conns.erase(conns.begin() + long(i));
             }

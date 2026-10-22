@@ -65,6 +65,15 @@ public:
         return client;
     }
 
+    // Engine ids of every order this owner has resting.
+    std::vector<lob::OrderId> owned_by(lob::Owner owner) const {
+        std::vector<lob::OrderId> ids;
+        for (auto it = by_client_.lower_bound({owner, 0});
+             it != by_client_.end() && it->first.first == owner; ++it)
+            ids.push_back(it->second);
+        return ids;
+    }
+
     std::size_t size() const { return live_.size(); }
 
 private:
@@ -268,6 +277,22 @@ inline void handle_frame(Engine& book, FeedPublisher& feed, Connection& c,
             return;
     }
     feed.publish_book(book);
+}
+
+// --- disconnect -------------------------------------------------------------
+// Ids are scoped to the connection, so once it is gone nobody can name its
+// orders. Cancel them rather than leave them resting with no owner. Returns
+// how many were canceled; one book snapshot follows if any were.
+
+inline std::size_t cancel_on_disconnect(Engine& book, FeedPublisher& feed,
+                                        lob::Owner owner) {
+    const auto ids = feed.orders.owned_by(owner);
+    for (const lob::OrderId id : ids) {
+        book.cancel(id);
+        feed.orders.forget(id);
+    }
+    if (!ids.empty()) feed.publish_book(book);
+    return ids.size();
 }
 
 } // namespace lobnet
