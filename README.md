@@ -8,17 +8,23 @@ optimization is a frozen, benchmarked step with before and after numbers.
 Every semantic claim is backed by a test. The hot path performs zero heap
 allocations, and the benchmark proves it on every run.
 
-Headline numbers on Apple M5, single thread, 2M-operation replay (seed 42,
-45% passive limit, 10% aggressive limit, 5% market, 30% cancel, 10% modify):
+Headline numbers on Apple M5, single thread: the median of five runs of 2M
+operations each (seed 42; 45% passive limit, 10% aggressive limit, 5%
+market, 30% cancel, 10% modify). The machine, its load, and every run are
+in [Benchmark](#benchmark).
 
 | metric | value |
 |---|---|
-| throughput | ~27M ops/s |
-| mean latency | 28 ns |
-| p50 / p90 / p99 / p99.9 | 41 / 42 / 84 / 166 ns |
-| heap allocations per op | 0.000 (measured every run) |
-| cancel, naive baseline vs final | 17.6 us vs 24 ns (~740x) |
-| line coverage (llvm-cov) | 98.0% |
+| throughput | 24.1M ops/s |
+| mean latency | 31.5 ns |
+| p50 / p99 / p99.9 | 41 / 84 / 250 ns |
+| heap allocations per op | zero, in every run |
+| tests | 414, at 98.0% line coverage (llvm-cov) |
+
+These were measured with two other processes each holding a core. In August
+2026, before the benchmark recorded load, the same engine on the same
+machine measured 27M ops/s, a 28 ns mean, and a 166 ns p99.9
+(`results/final_2m.csv`).
 
 ## Architecture
 
@@ -109,11 +115,53 @@ prev and next pointers, its level is reached through a back-pointer, and an
 emptied level is a cleared bit. Lazy deletion would add a dead-entry check
 to the matching loop and keep dead orders in memory, for no gain.
 
+## Benchmark
+
+Reproduce this table with one command after building (see
+[Build and run](#build-and-run)):
+
+```bash
+./scripts/bench_report.sh build
+```
+
+The script runs the final engine five times (2M measured operations each,
+after 100k warmup, seed 42), saves every run's full output and CSV rows
+under `results/`, and prints the median of each figure. The table below is
+`results/bench_2026-10-22.txt`:
+
+```
+machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), optimized
+timer resolution: 41.6 ns
+```
+
+| operation | mean ns | p50 | p99 | p99.9 |
+|---|---|---|---|---|
+| all | 31.5 | 41 | 84 | 250 |
+| limit | 31.1 | 41 | 84 | 500 |
+| market | 33.5 | 42 | 84 | 542 |
+| cancel | 30.0 | 41 | 83 | 125 |
+| modify | 36.8 | 42 | 84 | 250 |
+
+Throughput: median 24.1M orders per second; the five runs ranged from
+23.96M to 24.48M. Heap allocations in the measured region: zero in all five
+runs.
+
+Conditions, stated because they move the numbers: the load average was 4.2 to
+4.3 at the start of every run, two unrelated processes each held a core at about
+100% CPU, and the laptop was on battery. An earlier five-run batch the same
+day, taken before this script existed, had two runs at 10.6M and 12.5M ops/s,
+possibly from the scheduler moving the benchmark onto an efficiency core. A
+user-interactive QoS hint meant to keep it on performance cores made A/B
+results worse, so it is not used. The p50 sits at the timer's 41.6 ns
+resolution; the means and tails carry the finer information.
+
 ## The measured optimization story
 
 Seven engines share one replayable workload (seed 42). `naive` is the
 deliberately slow baseline and the semantic reference; each `v_n` changes ONE
-thing. Medians over 5 runs, 200k measured ops each:
+thing. Measured in August 2026 on the same machine, before runs recorded
+load. Medians over 5 runs, 200k measured ops each:
 
 | engine | change | mean ns | p50 | p90 | p99 | p99.9 | Mops/s | allocs/op |
 |---|---|---|---|---|---|---|---|---|
@@ -150,15 +198,16 @@ Honest readings, including the failures:
 
 ## Scale, endurance, and the wire
 
-Three more measurements, run after the single-thread story was settled:
+Three more measurements from August 2026, before runs recorded load:
 
 * **Sharding** (`--threads N`: one engine per thread, disjoint instruments,
   no shared state, the way real venues scale): aggregate throughput peaks at
   **~85M ops/s at 8 shards**, still zero allocations. The per-shard rate
-  falls from 24.6M (2 shards) to ~11M (8 shards): the shards saturate the
-  shared memory fabric, and the efficiency cores are slower. Matching is
-  memory-latency bound, which is exactly why production engines pin one
-  engine thread per core and stop there.
+  falls from 24.6M (2 shards) to ~19M (4 shards) as shards share the memory
+  system, then to ~11M (8 shards): the M5 has only 4 performance cores, so
+  past 4 shards some threads must run on the slower efficiency cores. This
+  is why production engines pin one engine thread per fast core and stop
+  there.
 * **Endurance** (100M operations, single thread, book growing to 328k live
   orders): **18.6M ops/s sustained, p99.9 333 ns, max 52 us, zero
   allocations**, with the pool and id map sized for the session
@@ -180,10 +229,14 @@ Three more measurements, run after the single-thread story was settled:
   avoided deliberately: the standard does not pin its algorithm, so seeds
   would not reproduce across standard libraries.
 * Timestamps come from the hardware counter (`cntvct_el0` behind an `isb`, or
-  `rdtsc` on x86), calibrated against `steady_clock` at startup. Apple
-  Silicon's counter steps at ~41.7 ns; single-op figures quantize to that
-  granule, which is why means accompany percentiles. Deltas between engines
-  are unaffected (both sides carry the same quantization).
+  `rdtsc` on x86), calibrated against `steady_clock` at startup. The harness
+  also measures the counter's resolution and prints it: Apple Silicon counts
+  in 1 ns units but advances in steps of about 41.7 ns, so single-op figures
+  quantize to that step, which is why means accompany percentiles. Deltas
+  between engines are unaffected (both sides carry the same quantization).
+* Every run first prints the CPU, core layout, OS, compiler, whether the
+  build is optimized, and the load average, so a result always carries its
+  conditions.
 * Percentiles are exact: every sample is kept and sorted, no histogram
   approximation. Cross-run figures are medians of 5 runs.
 * Global `operator new` (aligned overloads included) is interposed and counted
@@ -277,8 +330,9 @@ Requires CMake 3.20+ and a C++20 compiler. GoogleTest is vendored.
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 
-./build/lob_tests                      # 408 tests
-./build/bench final                    # benchmark the final engine
+./build/lob_tests                      # 414 tests
+./scripts/bench_report.sh build        # the Benchmark table: 5 runs, medians
+./build/bench final                    # one benchmark run of the final engine
 ./build/bench naive                    # the baseline, for contrast
 ./scripts/net_smoke.sh build           # end-to-end network test
 
@@ -288,8 +342,9 @@ cmake --build build-san --target lob_tests && ./build-san/lob_tests
 ```
 
 `bench` options: engine name (`naive v1 v2 v3 v4 v5 final`), `--ops N`,
-`--warmup N`, `--seed S`, `--label STR`, `--csv PATH`. Results append as CSV
-for charting.
+`--warmup N`, `--seed S`, `--label STR`, `--csv PATH`, `--threads N` (one
+engine per thread), `--pool SLOTS` and `--idmap SLOTS` (final engine
+capacity). Results append as CSV for charting.
 
 ## Repository layout
 
@@ -298,8 +353,8 @@ include/lob/        the final engine: order_book.hpp, pool.hpp, id_map.hpp, type
 engines/            naive_book.hpp (reference) and frozen snapshots book_v1..v5.hpp
 bench/              harness: clock, workload, stats, alloc counter, driver
 net/                protocol.hpp, framing.hpp, gateway, order_client, feed_client
-tests/              GoogleTest suites incl. differential and fuzz tests
-scripts/            net_smoke.sh
+tests/              GoogleTest suites incl. differential, property, and fuzz tests
+scripts/            bench_report.sh (README benchmark), net_smoke.sh
 docs/               perf.md (hardware counter profiling guide)
 results/            benchmark CSVs
 ```
@@ -316,5 +371,6 @@ results/            benchmark CSVs
   before matching (sequenced-log architecture).
 * The UDP feed has no retransmission or snapshot-recovery channel; gap
   detection is implemented, recovery is not.
-* Apple Silicon's 41.7 ns timer granule limits single-op resolution; the
-  numbers worth quoting are means, tails, and deltas, all of which survive it.
+* Apple Silicon's timer resolution (about 41.7 ns, measured on every run)
+  limits single-op resolution; the numbers worth quoting are means, tails,
+  and deltas, all of which survive it.

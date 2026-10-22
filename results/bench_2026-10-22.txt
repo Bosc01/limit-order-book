@@ -1,0 +1,90 @@
+===== run 1 of 5: build/bench final --ops 2000000 --warmup 100000 =====
+machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), optimized; load average at start: 4.29 4.57 4.15
+clock: 1.0000 ns per counter unit, resolution 41.6 ns, read overhead ~0 ns
+workload: 2100000 ops (100000 warmup + 2000000 measured), seed 42
+
+engine=final label=2026-10-22-run1
+  kind         count     mean_ns      p50      p90      p99    p99.9        max
+  limit      1099220          31       41       42       84      500      15333
+  market      100021          33       42       42       84      542       7768
+  cancel      600984          31       41       42       83      125       9500
+  modify      199775          37       42       83       84      250       9017
+  ALL        2000000          32       41       42       84      250      15333
+
+throughput: 24046072 ops/s (0.08 s wall for 2000000 ops)
+heap allocations in measured region: 0 (0.000 per op)
+resting orders at end: 60225
+csv appended: results/bench_2026-10-22.csv
+===== run 2 of 5: build/bench final --ops 2000000 --warmup 100000 =====
+machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), optimized; load average at start: 4.19 4.54 4.14
+clock: 1.0000 ns per counter unit, resolution 41.7 ns, read overhead ~0 ns
+workload: 2100000 ops (100000 warmup + 2000000 measured), seed 42
+
+engine=final label=2026-10-22-run2
+  kind         count     mean_ns      p50      p90      p99    p99.9        max
+  limit      1099220          30       41       42       84      542       8750
+  market      100021          33       41       42       84      583       2100
+  cancel      600984          30       41       42       83      125       4667
+  modify      199775          37       42       42       84      542       1375
+  ALL        2000000          31       41       42       84      542       8750
+
+throughput: 24389996 ops/s (0.08 s wall for 2000000 ops)
+heap allocations in measured region: 0 (0.000 per op)
+resting orders at end: 60225
+csv appended: results/bench_2026-10-22.csv
+===== run 3 of 5: build/bench final --ops 2000000 --warmup 100000 =====
+machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), optimized; load average at start: 4.19 4.54 4.14
+clock: 1.0000 ns per counter unit, resolution 41.7 ns, read overhead ~0 ns
+workload: 2100000 ops (100000 warmup + 2000000 measured), seed 42
+
+engine=final label=2026-10-22-run3
+  kind         count     mean_ns      p50      p90      p99    p99.9        max
+  limit      1099220          31       41       42       84      642      10351
+  market      100021          34       42       42       84      666       8750
+  cancel      600984          31       41       42       83      584      12875
+  modify      199775          37       42       59       84      583       1375
+  ALL        2000000          32       41       42       84      625      12875
+
+throughput: 23956220 ops/s (0.08 s wall for 2000000 ops)
+heap allocations in measured region: 0 (0.000 per op)
+resting orders at end: 60225
+csv appended: results/bench_2026-10-22.csv
+===== run 4 of 5: build/bench final --ops 2000000 --warmup 100000 =====
+machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), optimized; load average at start: 4.19 4.54 4.14
+clock: 1.0000 ns per counter unit, resolution 41.7 ns, read overhead ~0 ns
+workload: 2100000 ops (100000 warmup + 2000000 measured), seed 42
+
+engine=final label=2026-10-22-run4
+  kind         count     mean_ns      p50      p90      p99    p99.9        max
+  limit      1099220          31       41       42      125      250       3352
+  market      100021          34       42       42       84      542       1708
+  cancel      600984          30       41       42       84      183       2250
+  modify      199775          37       42       42      100      208      13434
+  ALL        2000000          32       41       42       84      250      13434
+
+throughput: 24060826 ops/s (0.08 s wall for 2000000 ops)
+heap allocations in measured region: 0 (0.000 per op)
+resting orders at end: 60225
+csv appended: results/bench_2026-10-22.csv
+===== run 5 of 5: build/bench final --ops 2000000 --warmup 100000 =====
+machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), optimized; load average at start: 4.19 4.54 4.14
+clock: 1.0000 ns per counter unit, resolution 41.7 ns, read overhead ~0 ns
+workload: 2100000 ops (100000 warmup + 2000000 measured), seed 42
+
+engine=final label=2026-10-22-run5
+  kind         count     mean_ns      p50      p90      p99    p99.9        max
+  limit      1099220          30       41       42       84      167      14435
+  market      100021          33       41       42       84      125       1458
+  cancel      600984          30       41       42       83      125       3476
+  modify      199775          36       42       42       84      167       8416
+  ALL        2000000          31       41       42       84      125      14435
+
+throughput: 24476184 ops/s (0.08 s wall for 2000000 ops)
+heap allocations in measured region: 0 (0.000 per op)
+resting orders at end: 60225
+csv appended: results/bench_2026-10-22.csv
