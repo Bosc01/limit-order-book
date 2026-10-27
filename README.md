@@ -346,6 +346,7 @@ cmake --build build -j
 ./build/bench final                    # one benchmark run of the final engine
 ./build/bench naive                    # the baseline, for contrast
 ./scripts/net_smoke.sh build           # end-to-end network test
+./scripts/gateway_load.sh build        # gateway load test: 1-128 clients, writes results/gateway_load.md
 
 # sanitizer build (tests only; sanitizers distort benchmark numbers)
 cmake -B build-san -DLOB_SANITIZE=address,undefined
@@ -368,7 +369,7 @@ engines/            naive_book.hpp (reference) and frozen snapshots book_v1..v5.
 bench/              harness: clock, workload, stats, alloc counter, driver
 net/                protocol.hpp, framing.hpp, gateway, order_client, feed_client
 tests/              GoogleTest suites incl. differential, property, and fuzz tests
-scripts/            bench_report.sh (README benchmark), net_smoke.sh
+scripts/            bench_report.sh (README benchmark), net_smoke.sh, gateway_load.sh
 docs/               perf.md (hardware counter profiling guide)
 results/            benchmark CSVs
 ```

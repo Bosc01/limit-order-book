@@ -71,6 +71,8 @@ foreach(t gateway order_client feed_client)
   target_include_directories(${t} PRIVATE include .)
   target_compile_options(${t} PRIVATE ${LOB_HOT_FLAGS})
 endforeach()
+find_package(Threads REQUIRED)
+target_link_libraries(order_client PRIVATE Threads::Threads) # --clients load mode
 
 add_executable(lob_tests
   tests/engine_semantics_test.cpp

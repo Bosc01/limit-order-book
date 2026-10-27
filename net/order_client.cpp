@@ -1,9 +1,13 @@
-// Order-entry client. Two modes:
-//   --auto N   deterministic random burst of N orders (seeded), then a
-//              summary of exec-report statuses -- used by the smoke test
-//   (default)  reads simple commands from stdin:
-//              buy <px> <qty> | sell <px> <qty> | mkt <b|s> <qty>
-//              cancel <id> | modify <id> <px> <qty> | quit
+// Order-entry client. Three modes:
+//   --auto N     deterministic random burst of N orders (seeded), then a
+//                summary of exec-report statuses -- used by the smoke test
+//   --clients N  N threads on N persistent connections, each running the
+//                --auto mix closed loop for a fixed time, then one line of
+//                throughput and round-trip percentiles -- used by
+//                scripts/gateway_load.sh
+//   (default)    reads simple commands from stdin:
+//                buy <px> <qty> | sell <px> <qty> | mkt <b|s> <qty>
+//                cancel <id> | modify <id> <px> <qty> | quit
 #include <arpa/inet.h>
 #include <cerrno>
 #include <cstdio>
@@ -12,9 +16,11 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <random>
 #include <string>
+#include <thread>
 #include <vector>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -94,6 +100,43 @@ int read_reports(int fd, lobnet::FrameBuffer& fb, int expect_at_least,
     return seen;
 }
 
+// The next op of the seeded auto-mode mix, encoded into buf. Returns the
+// frame size, or 0 if encoding failed.
+std::size_t next_op(std::mt19937_64& rng, std::uint64_t& next_id,
+                    std::uint8_t (&buf)[128]) {
+    const std::uint64_t r = rng() % 100;
+    if (r < 60 || next_id < 10) { // passive-ish limit
+        const lob::Side s = (rng() & 1) ? lob::Side::Ask : lob::Side::Bid;
+        const lob::Price px =
+            10'000 + (s == lob::Side::Bid ? -1 : 1) * lob::Price(1 + rng() % 8);
+        return lobnet::encode(buf, sizeof(buf),
+                              lobnet::NewOrderMsg{next_id++, px,
+                                                  lob::Qty(1 + rng() % 100),
+                                                  s, lob::Tif::GTC});
+    }
+    if (r < 75) { // aggressive limit
+        const lob::Side s = (rng() & 1) ? lob::Side::Ask : lob::Side::Bid;
+        const lob::Price px =
+            10'000 + (s == lob::Side::Bid ? 1 : -1) * lob::Price(rng() % 3);
+        return lobnet::encode(buf, sizeof(buf),
+                              lobnet::NewOrderMsg{next_id++, px,
+                                                  lob::Qty(1 + rng() % 50),
+                                                  s, lob::Tif::GTC});
+    }
+    if (r < 85)
+        return lobnet::encode(buf, sizeof(buf),
+                              lobnet::MarketMsg{next_id++, lob::Qty(1 + rng() % 20),
+                                                (rng() & 1) ? lob::Side::Ask
+                                                            : lob::Side::Bid});
+    if (r < 95)
+        return lobnet::encode(buf, sizeof(buf),
+                              lobnet::CancelMsg{1 + rng() % (next_id ? next_id : 1)});
+    return lobnet::encode(buf, sizeof(buf),
+                          lobnet::ModifyMsg{1 + rng() % (next_id ? next_id : 1),
+                                            10'000 - lob::Price(1 + rng() % 5),
+                                            lob::Qty(1 + rng() % 30)});
+}
+
 int run_auto(int fd, int n_orders, std::uint64_t seed) {
     std::mt19937_64 rng(seed);
     lobnet::FrameBuffer fb;
@@ -107,38 +150,7 @@ int run_auto(int fd, int n_orders, std::uint64_t seed) {
     rtt_ns.reserve(static_cast<std::size_t>(n_orders));
 
     for (int i = 0; i < n_orders; ++i) {
-        const std::uint64_t r = rng() % 100;
-        std::size_t len = 0;
-        if (r < 60 || next_id < 10) { // passive-ish limit
-            const lob::Side s = (rng() & 1) ? lob::Side::Ask : lob::Side::Bid;
-            const lob::Price px =
-                10'000 + (s == lob::Side::Bid ? -1 : 1) * lob::Price(1 + rng() % 8);
-            len = lobnet::encode(buf, sizeof(buf),
-                                 lobnet::NewOrderMsg{next_id++, px,
-                                                     lob::Qty(1 + rng() % 100),
-                                                     s, lob::Tif::GTC});
-        } else if (r < 75) { // aggressive limit
-            const lob::Side s = (rng() & 1) ? lob::Side::Ask : lob::Side::Bid;
-            const lob::Price px =
-                10'000 + (s == lob::Side::Bid ? 1 : -1) * lob::Price(rng() % 3);
-            len = lobnet::encode(buf, sizeof(buf),
-                                 lobnet::NewOrderMsg{next_id++, px,
-                                                     lob::Qty(1 + rng() % 50),
-                                                     s, lob::Tif::GTC});
-        } else if (r < 85) {
-            len = lobnet::encode(buf, sizeof(buf),
-                                 lobnet::MarketMsg{next_id++, lob::Qty(1 + rng() % 20),
-                                                   (rng() & 1) ? lob::Side::Ask
-                                                               : lob::Side::Bid});
-        } else if (r < 95) {
-            len = lobnet::encode(buf, sizeof(buf),
-                                 lobnet::CancelMsg{1 + rng() % (next_id ? next_id : 1)});
-        } else {
-            len = lobnet::encode(buf, sizeof(buf),
-                                 lobnet::ModifyMsg{1 + rng() % (next_id ? next_id : 1),
-                                                   10'000 - lob::Price(1 + rng() % 5),
-                                                   lob::Qty(1 + rng() % 30)});
-        }
+        const std::size_t len = next_op(rng, next_id, buf);
         if (!len) return 1;
         const auto t0 = std::chrono::steady_clock::now();
         if (!send_all(fd, buf, len)) return 1;
@@ -162,6 +174,87 @@ int run_auto(int fd, int n_orders, std::uint64_t seed) {
         if (counts[s])
             std::printf("  %-13s %d\n",
                         status_name(static_cast<lobnet::ExecStatus>(s)), counts[s]);
+    return 0;
+}
+
+// Load mode: `clients` threads, each on its own persistent connection with
+// its own seed (seed + thread index), each running the auto-mode mix closed
+// loop: one op in flight per connection, the next sent when its exec report
+// arrives. Ops acknowledged inside the measured window count toward
+// throughput and the pooled round-trip percentiles; the warmup does not.
+// The connections then close with their resting orders still on the book,
+// which leaves those orders to the gateway's cancel-on-disconnect.
+int run_load(const char* ip, std::uint16_t port, int clients, double warmup_s,
+             double seconds, std::uint64_t seed) {
+    using Clock = std::chrono::steady_clock;
+    // One round trip per connection before the next connects (a cancel of
+    // id 0 answers Unknown) confirms the gateway accepted it, so the load
+    // starts with every client live and the listen backlog never fills.
+    std::vector<int> fds;
+    for (int i = 0; i < clients; ++i) {
+        const int fd = connect_to(ip, port);
+        if (fd < 0) return 1;
+        fds.push_back(fd);
+        lobnet::FrameBuffer fb;
+        int counts[8] = {0};
+        std::uint8_t buf[64];
+        const auto len = lobnet::encode(buf, sizeof(buf), lobnet::CancelMsg{0});
+        if (!send_all(fd, buf, len) || read_reports(fd, fb, 1, false, counts) < 0)
+            return 1;
+    }
+
+    std::atomic<bool> measuring{false}, stop{false}, failed{false};
+    std::vector<std::vector<std::uint64_t>> rtt_ns(fds.size());
+    std::vector<std::thread> threads;
+    for (std::size_t t = 0; t < fds.size(); ++t)
+        threads.emplace_back([&, t] {
+            std::mt19937_64 rng(seed + t);
+            lobnet::FrameBuffer fb;
+            int counts[8] = {0};
+            std::uint64_t next_id = 1;
+            std::uint8_t buf[128];
+            while (!stop.load(std::memory_order_relaxed)) {
+                const std::size_t len = next_op(rng, next_id, buf);
+                const auto t0 = Clock::now();
+                if (!len || !send_all(fds[t], buf, len) ||
+                    read_reports(fds[t], fb, 1, false, counts) < 0) {
+                    failed = true;
+                    return;
+                }
+                const auto t1 = Clock::now();
+                if (measuring.load(std::memory_order_relaxed))
+                    rtt_ns[t].push_back(static_cast<std::uint64_t>(
+                        std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0)
+                            .count()));
+            }
+        });
+
+    std::this_thread::sleep_for(std::chrono::duration<double>(warmup_s));
+    const auto m0 = Clock::now();
+    measuring = true;
+    std::this_thread::sleep_for(std::chrono::duration<double>(seconds));
+    measuring = false;
+    const auto m1 = Clock::now();
+    stop = true;
+    for (auto& th : threads) th.join();
+    for (const int fd : fds) ::close(fd);
+    if (failed) {
+        std::fprintf(stderr, "load: a connection failed during the run\n");
+        return 1;
+    }
+
+    std::vector<std::uint64_t> all;
+    for (const auto& v : rtt_ns) all.insert(all.end(), v.begin(), v.end());
+    if (all.empty()) return 1;
+    std::sort(all.begin(), all.end());
+    auto pct = [&](double q) {
+        return double(all[static_cast<std::size_t>(q * double(all.size() - 1))]) / 1e3;
+    };
+    const double window = std::chrono::duration<double>(m1 - m0).count();
+    std::printf("load: clients=%d seed=%llu window_s=%.3f ops=%zu ops_per_s=%.0f "
+                "p50_us=%.1f p99_us=%.1f\n",
+                clients, (unsigned long long)seed, window, all.size(),
+                double(all.size()) / window, pct(0.5), pct(0.99));
     return 0;
 }
 
@@ -218,13 +311,20 @@ int main(int argc, char** argv) {
     std::uint16_t port  = 9001;
     int           autoN = 0;
     std::uint64_t seed  = 42;
+    int           clients = 0;
+    double        warmup  = 1.0, seconds = 5.0;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         if (a == "--auto" && i + 1 < argc) autoN = atoi(argv[++i]);
         else if (a == "--seed" && i + 1 < argc) seed = std::strtoull(argv[++i], nullptr, 10);
         else if (a == "--port" && i + 1 < argc) port = std::uint16_t(atoi(argv[++i]));
-        else { std::fprintf(stderr, "usage: order_client [--auto N] [--seed S] [--port P]\n"); return 1; }
+        else if (a == "--clients" && i + 1 < argc) clients = atoi(argv[++i]);
+        else if (a == "--warmup" && i + 1 < argc) warmup = atof(argv[++i]);
+        else if (a == "--seconds" && i + 1 < argc) seconds = atof(argv[++i]);
+        else { std::fprintf(stderr, "usage: order_client [--auto N] [--seed S] [--port P]\n"
+                                    "       order_client --clients N [--warmup S] [--seconds S] [--seed S] [--port P]\n"); return 1; }
     }
+    if (clients > 0) return run_load(ip, port, clients, warmup, seconds, seed);
 
     const int fd = connect_to(ip, port);
     if (fd < 0) return 1;

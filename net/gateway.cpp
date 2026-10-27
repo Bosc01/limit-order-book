@@ -101,6 +101,9 @@ int main(int argc, char** argv) {
         else { std::fprintf(stderr, "usage: gateway [--port N] [--udp-ip A] [--udp-port N] [--stp none|cancel-resting|reject-incoming]\n"); return 1; }
     }
 
+    // Line-buffered even when redirected: scripts watch this log for the
+    // listening line and for each disconnect.
+    std::setvbuf(stdout, nullptr, _IOLBF, 0);
     std::signal(SIGPIPE, SIG_IGN);
     std::signal(SIGINT, on_signal);
     std::signal(SIGTERM, on_signal);
