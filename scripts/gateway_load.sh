@@ -7,6 +7,7 @@
 # fails the script. Writes medians, every run, and the machine to
 # results/gateway_load.md.
 # Usage: scripts/gateway_load.sh [build-dir]   (RUNS=5 WARMUP=1 DURATION=5)
+# Inside a VM, set HOST_NOTE to describe the host the guest cannot see.
 set -eu
 BUILD="${1:-build}"
 RUNS="${RUNS:-5}"
@@ -73,7 +74,8 @@ median() {
 }
 
 CPU="$( (lscpu 2>/dev/null | sed -n 's/^Model name: *//p'
-         sysctl -n machdep.cpu.brand_string 2>/dev/null) | head -1)"
+         sysctl -n machdep.cpu.brand_string 2>/dev/null
+         lscpu 2>/dev/null | sed -n 's/^Vendor ID: *//p') | grep -v '^-$' | head -1)"
 VIRT="$(systemd-detect-virt 2>/dev/null; true)"
 CXX="$(sed -n 's/^CMAKE_CXX_COMPILER:[A-Z]*=//p' "$BUILD/CMakeCache.txt")"
 COMMIT="$(git rev-parse --short HEAD)$(git diff --quiet HEAD -- . ':!results' || echo ' with uncommitted changes')"
@@ -101,6 +103,9 @@ in the first table is the median of $RUNS runs.
 * kernel: $(uname -srm)
 * compiler: $("$CXX" --version | head -1)
 * load average at start: $LOAD
+EOF
+[ -n "${HOST_NOTE:-}" ] && echo "* host: $HOST_NOTE"
+cat <<EOF
 
 | clients | orders/s | p50 round trip (us) | p99 round trip (us) |
 |--:|--:|--:|--:|
