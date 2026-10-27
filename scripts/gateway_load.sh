@@ -44,6 +44,7 @@ LOAD="$(uptime | sed 's/.*load average[s]*: //')"
 for n in $CLIENTS; do
     for r in $(seq 1 "$RUNS"); do
         log="$TMP/gateway_${n}_$r.log"
+        : > "$log" # exists before the background gateway's redirect runs
         "$BUILD/gateway" --port $PORT --udp-port $UDP_PORT > "$log" 2>&1 &
         GW_PID=$!
         wait_for "$log" "orders on" 1
