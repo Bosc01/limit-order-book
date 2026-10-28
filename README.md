@@ -140,7 +140,7 @@ warmup, fewer than the headline because `naive` slows as its book grows
 | naive | std::map + std::list, O(n) cancel | 0.15 (0.14 to 0.15) |  | 0.15 | 6571.7 | 42 | 22643 | 48577 | 60201 | 0.402 |
 | v1 | map ladder, intrusive list, hash index | 25.5 (25.4 to 25.7) | +16888.2% | 17.2 | 49.0 | 42 | 84 | 125 | 208 | 0.797 |
 | v2 | + slab pool for orders | 32.2 (31.8 to 32.6) | +25.9% | 20.1 | 40.7 | 42 | 83 | 125 | 167 | 0.402 |
-| v3 | + Order aligned to 64 bytes | 32.1 (31.6 to 32.4) | -0.0%, ranges overlap | 20.1 | 40.5 | 42 | 83 | 125 | 167 | 0.402 |
+| v3 | + Order aligned to 64 bytes | 32.1 (31.6 to 32.4) | 0.0%, ranges overlap | 20.1 | 40.5 | 42 | 83 | 125 | 167 | 0.402 |
 | v4 | + branch layout in the match loop | 32.8 (32.2 to 33.1) | +2.0%, ranges overlap | 20.1 | 40.5 | 42 | 83 | 125 | 167 | 0.402 |
 | v5 | + flat banded ladder with bitmap | 37.2 (36.7 to 37.6) | +13.4% | 22.0 | 36.4 | 42 | 42 | 84 | 167 | 0.396 |
 | final | + open-addressing id map, Fibonacci hash | 78.2 (77.1 to 78.9) | +110.0% | 30.6 | 23.6 | 41 | 42 | 83 | 125 | 0.000 |

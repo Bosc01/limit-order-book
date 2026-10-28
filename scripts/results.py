@@ -74,7 +74,8 @@ def down(x, places):
 
 
 def signed(x, places):
-    return ("-" if x < 0 else "+") + down(abs(x), places)
+    s = down(abs(x), places)
+    return s if float(s) == 0 else ("-" if x < 0 else "+") + s
 
 
 def mops(x):

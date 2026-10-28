@@ -108,7 +108,7 @@ stay in the table.
 |---|---|---|---|---|---|---|
 | `noise-check` | The same build as a. | 49.8 (48.5 to 50.1) | 49.5 (46.2 to 49.8) | -0.5% | 4.82 | no clear change, ranges overlap |
 | `try-cancel-take` | cancel takes its id-map entry with one probe walk instead of find and then erase. Another job held three cores; the code was reverted after this batch. | 31.6 (29.8 to 32.4) | 32.8 (31.7 to 33.7) | +3.9% | 9.53 to 9.92 | not valid: before build ran -37% from the baseline |
-| `try-cancel-take-rerun` | cancel takes its id-map entry with one probe walk, second batch. Both builds ran about a third as fast as a minute later. | 13.5 (11.1 to 17.5) | 13.5 (7.6 to 16.4) | -0.0% | 4.25 to 4.39 | not valid: before build ran -73% from the baseline |
+| `try-cancel-take-rerun` | cancel takes its id-map entry with one probe walk, second batch. Both builds ran about a third as fast as a minute later. | 13.5 (11.1 to 17.5) | 13.5 (7.6 to 16.4) | 0.0% | 4.25 to 4.39 | not valid: before build ran -73% from the baseline |
 | `try-cancel-take-run3` | cancel takes its id-map entry with one probe walk, third batch. Stays reverted. | 52.2 (47.3 to 53.5) | 52.5 (51.8 to 54.9) | +0.5% | 3.81 to 3.91 | no clear change, ranges overlap |
 | `try-fibonacci-hash` | Fibonacci hashing in the id map. Another job held three cores during the batch. | 29.5 (26.4 to 31.4) | 36.3 (30.6 to 39.0) | +23.3% | 8.70 to 9.02 | not valid: before build ran -41% from the baseline |
 | `try-fibonacci-hash-rerun` | Fibonacci hashing in the id map, second batch. Both builds ran about a third as fast as a minute later. | 18.7 (10.8 to 30.0) | 19.2 (8.8 to 27.4) | +2.5% | 4.25 to 4.68 | not valid: before build ran -62% from the baseline |
@@ -129,7 +129,7 @@ stay in the table.
   23.9 ns. Neither batch separates the two candidate causes: the shorter
   dependency chain in front of each probe's load, or fewer collisions from
   the more even spacing it gives sequential ids.
-* Single-probe cancel stays reverted: +0.6% in its valid batch, inside the
+* Single-probe cancel stays reverted: +0.5% in its valid batch, inside the
   noise. The second walk it removed was most likely in L1 already, and its
   hash can be computed while the first probe's load is in flight.
 
