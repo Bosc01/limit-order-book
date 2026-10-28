@@ -1,0 +1,27 @@
+50 runs of `build/bench final --ops 2000000 --warmup 100000` under `sample`; 1918 self samples inside run_ops_untimed
+ share samples  source line              function
+ 19.3%     371  harness.hpp:29           bench::dispatch<>
+ 18.1%     347  harness.hpp:31           bench::dispatch<>
+  9.4%     180  harness.hpp:35           bench::dispatch<>
+  5.2%      99  id_map.hpp:79            lob::IdMap<>::erase
+  4.5%      87  order_book.hpp:134       lob::OrderBookT<>::modify
+  3.7%      71  harness.hpp:0            bench::dispatch<>
+  3.4%      66  order_book.hpp:449       lob::OrderBookT<>::rest<
+  3.1%      59  id_map.hpp:67            lob::IdMap<>::erase
+  3.0%      57  order_book.hpp:386       lob::OrderBookT<>::match<
+  2.8%      53  order_book.hpp:378       lob::OrderBookT<>::match<
+  1.8%      34  order_book.hpp:354       lob::OrderBookT<>::match<
+  1.7%      32  order_book.hpp:319       lob::OrderBookT<>::execute<
+  1.4%      27  order_book.hpp:340       lob::OrderBookT<>::execute<
+  1.4%      26  order_book.hpp:400       lob::OrderBookT<>::match<
+  1.3%      25  id_map.hpp:66            lob::IdMap<>::erase
+  1.2%      23  order_book.hpp:451       lob::OrderBookT<>::rest<
+  1.1%      21  order_book.hpp:347       lob::OrderBookT<>::match<
+  1.0%      20  order_book.hpp:352       lob::OrderBookT<>::match<
+  0.9%      17  order_book.hpp:434       lob::OrderBookT<>::rest<
+  0.9%      17  order_book.hpp:90        lob::OrderBookT<>::submit_market
+  0.8%      16  ?                        ???
+  0.8%      15  order_book.hpp:145       lob::OrderBookT<>::modify
+  0.7%      14  order_book.hpp:317       lob::OrderBookT<>::execute<
+  0.7%      14  order_book.hpp:140       lob::OrderBookT<>::modify
+  0.7%      13  order_book.hpp:390       lob::OrderBookT<>::match<
