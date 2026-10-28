@@ -2,14 +2,15 @@
 """Summaries and README tables from the benchmark's JSON runs.
 
   scripts/results.py summary results/BATCH   medians and spread of one batch
-  scripts/results.py readme [--check]        rewrite README.md's generated
-                                             blocks; --check only reports
-                                             whether they are stale
+  scripts/results.py readme [--check]        rewrite the generated blocks in
+                                             README.md and docs/benchmarks.md;
+                                             --check only reports whether
+                                             they are stale
 
 A batch directory holds NAME-I.json runs written by scripts/bench_report.sh,
 builds.txt (name, engine, and commit of each entry), and optionally
 notes.txt (an entry name, a space, then a description of that entry).
-Every number between "BEGIN generated" and "END generated" in README.md
+Every number between "BEGIN generated" and "END generated" in those files
 comes from these files.
 """
 import json
@@ -227,24 +228,29 @@ BLOCK = re.compile(r"(<!-- BEGIN generated: (?P<args>[^>]*?) -->\n)(?P<body>.*?)
                    r"(<!-- END generated -->)", re.S)
 
 
-def readme(check):
-    path = ROOT / "README.md"
-    old = path.read_text()
+DOCS = ["README.md", "docs/benchmarks.md"]
 
+
+def readme(check):
     def fill(m):
         kind, *args = m.group("args").split()
         return m.group(1) + BLOCKS[kind](*args) + m.group(4)
 
-    new = BLOCK.sub(fill, old)
-    if check:
-        if new != old:
-            sys.exit("README.md is stale against results/; run scripts/results.py readme")
-        print("README.md generated blocks match results/")
-    elif new != old:
-        path.write_text(new)
-        print("README.md generated blocks rewritten")
-    else:
-        print("README.md generated blocks already current")
+    stale = False
+    for doc in DOCS:
+        path = ROOT / doc
+        old = path.read_text()
+        new = BLOCK.sub(fill, old)
+        if new == old:
+            print(f"{doc}: generated blocks match results/")
+        elif check:
+            print(f"{doc}: stale against results/; run scripts/results.py readme")
+            stale = True
+        else:
+            path.write_text(new)
+            print(f"{doc}: generated blocks rewritten")
+    if stale:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

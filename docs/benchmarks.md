@@ -1,69 +1,173 @@
-# Hardware counter profiling
+# Benchmarks
 
-The benchmark reports wall-clock latency. To explain WHY a number moved, you
-need hardware counters: cache misses, branch mispredicts, cycles and
-instructions per operation.
+## Method
 
-## Linux (perf), the real tool
+* The workload is generated before timing from raw `mt19937_64` output
+  (seed 42), so every engine replays the same stream byte for byte.
+  `std::uniform_int_distribution` is not used: the standard does not fix
+  its algorithm, so one seed would give different streams on libc++ and
+  libstdc++.
+* Each run makes two passes over the same operations, each on a fresh book.
+  The timed pass reads the counter around every operation (`isb; mrs
+  cntvct_el0` on arm64, `lfence; rdtsc` on x86), calibrated against
+  `steady_clock`. The untimed pass has no timestamps and gives throughput.
+  It must end in the same book state as the timed pass, or the run fails.
+* Percentiles are exact: every sample is kept and sorted.
+* Global `operator new`, aligned overloads included, is replaced by a
+  counting version over the measured region, so the allocation figure is
+  measured on every run.
+* Each operation's result feeds a compiler barrier, so the optimizer cannot
+  drop work.
+* Every run records CPU, core layout, OS, compiler, flags, build type, load
+  average, and the measured timer resolution in its JSON.
+* Comparisons run the builds interleaved in one batch (A then B, then B then
+  A), five runs each. A change is called faster or slower only when every
+  run of one build beats every run of the other.
+* The benchmark is closed loop, so it measures service time. There is no
+  arrival schedule and so no coordinated omission to correct; queueing is
+  measured at the gateway instead.
 
-`perf` is Linux-only, and hypervisors generally do not virtualize the PMU, so
-use a bare-metal Linux box:
+Reproduce, then regenerate every table in the README and in this file:
 
 ```bash
-# counters over a whole run
-perf stat -e cycles,instructions,branches,branch-misses,\
-cache-references,cache-misses,L1-dcache-loads,L1-dcache-load-misses,\
-LLC-loads,LLC-load-misses \
-  ./build/bench final --ops 1000000 --label perf-run
-
-# where the cycles go, annotated per function and instruction
-perf record -g ./build/bench final --ops 1000000
-perf report
+./scripts/bench_report.sh mine final=build
+python3 scripts/results.py summary mine
+python3 scripts/results.py readme
 ```
 
-Convert totals to per-op numbers by dividing by the measured op count. What
-to watch per optimization:
+`results.py readme --check` reports drift without writing; CI runs it.
 
-| counter | what a drop means |
-|---|---|
-| L1-dcache-load-misses | better locality (pool, flat ladder) |
-| LLC-load-misses | working set fits cache, less pointer chasing |
-| branch-misses | branch discipline, side specialization |
-| instructions per cycle | less stalling overall (higher is better) |
+## Conditions
 
-For stable numbers: pin the process (`taskset -c 3`), set the governor to
-`performance`, and ideally isolate the core (`isolcpus`) so the scheduler
-keeps other work off it.
+Every batch dated 2026-10-27 ran on battery power, per the system power log,
+and batches after commit c662000 log the battery line before each run in
+their `output.txt`. The Bluetooth daemon and an RStudio session each held a
+core near 100% throughout. Under these conditions the same final build
+measured 57.8M ops/s in one batch (`results/try-fibonacci-hash-run3/`) and
+51.0M in another, minutes apart. Absolute figures move by about 15% between
+batches, which is why a change is only judged inside one interleaved batch.
 
-## macOS (this machine)
+## Final engine by operation
 
-No `perf` here, and VMs on Apple Silicon cannot see the PMU either. In order
-of usefulness:
+<!-- BEGIN generated: operations final-2026-10-27 final -->
+```
+machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), Release
+flags: -std=c++20 -O3 -DNDEBUG -O3 -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic
+timer resolution: 42.7 ns
+```
+
+| operation | mean ns | p50 | p99 | p99.9 |
+|---|---|---|---|---|
+| all | 33.4 | 42 | 84 | 208 |
+| limit | 32.9 | 41 | 125 | 209 |
+| market | 35.1 | 42 | 84 | 167 |
+| cancel | 32.0 | 41 | 84 | 125 |
+| modify | 39.6 | 42 | 125 | 167 |
+
+Throughput, untimed pass: median 51.0M ops/s, runs from 47.6M to 53.2M. With a timestamp around every op: median 22.1M, runs from 19.9M to 23.6M. Load average at the start of each run: 3.76 to 3.83. Every run is in `results/final-2026-10-27/`, built from commit `eefb3a6`.
+<!-- END generated -->
+
+In a profile of the timed pass, 61.7% of samples land on the two counter
+reads (`results/profiles/`). The `isb` before each read waits for every
+earlier instruction to complete, so one operation's cache misses cannot
+overlap the next operation's work. That is why the timed pass runs at less
+than half the untimed rate, and why its latencies overstate the cost of an
+operation inside a pipelined stream. The p50 sits at the counter's step of
+about 42 ns; the means and tails carry the finer information.
+
+## Profile-driven attempts, October 2026
+
+`scripts/profile.py` sampled the untimed pass of the final engine
+(`results/profiles/`). After the switch on operation type, which mispredicts
+because the workload mixes types at random, the hottest lines were id-map
+probes and the order loads in `match` and `rest`. Two changes came from that
+profile:
+
+* Single-probe cancel. Cancel found the slot, then `erase()` hashed the id
+  and walked the same probe chain again. `take()` does both in one walk.
+* Fibonacci hashing. Every probe starts with the hash, and backward-shift
+  deletion rehashes each neighbor it inspects. The splitmix64 finalizer it
+  replaced is two multiplies and three xor-shifts in a dependent chain;
+  Fibonacci hashing is one multiply and a shift.
+
+Each batch runs the unchanged build and the changed build interleaved, five
+runs each. A batch is valid only if its unchanged build ran within 10% of
+the baseline batch's median (`results/baseline/`, 50.0M ops/s). The check
+reads only the unchanged build, so it cannot favor a change. Invalid batches
+stay in the table.
+
+<!-- BEGIN generated: attempts baseline noise-check try-cancel-take try-cancel-take-rerun try-cancel-take-run3 try-fibonacci-hash try-fibonacci-hash-rerun try-fibonacci-hash-run3 -->
+| batch | change | before, Mops/s | after, Mops/s | median | load | verdict |
+|---|---|---|---|---|---|---|
+| `noise-check` | The same build as a. | 49.8 (48.6 to 50.2) | 49.6 (46.2 to 49.8) | -0.5% | 4.82 to 4.82 | no clear change, ranges overlap |
+| `try-cancel-take` | cancel takes its id-map entry with one probe walk instead of find and then erase. Another job held three cores; the code was reverted after this batch. | 31.6 (29.9 to 32.5) | 32.8 (31.7 to 33.8) | +3.9% | 9.53 to 9.92 | not valid: before build ran -37% from the baseline |
+| `try-cancel-take-rerun` | cancel takes its id-map entry with one probe walk, second batch. Both builds ran about a third as fast as a minute later. | 13.6 (11.2 to 17.5) | 13.6 (7.7 to 16.4) | -0.0% | 4.25 to 4.39 | not valid: before build ran -73% from the baseline |
+| `try-cancel-take-run3` | cancel takes its id-map entry with one probe walk, third batch. Stays reverted. | 52.3 (47.3 to 53.5) | 52.6 (51.8 to 55.0) | +0.6% | 3.81 to 3.91 | no clear change, ranges overlap |
+| `try-fibonacci-hash` | Fibonacci hashing in the id map. Another job held three cores during the batch. | 29.5 (26.5 to 31.4) | 36.4 (30.6 to 39.0) | +23.3% | 8.70 to 9.02 | not valid: before build ran -41% from the baseline |
+| `try-fibonacci-hash-rerun` | Fibonacci hashing in the id map, second batch. Both builds ran about a third as fast as a minute later. | 18.7 (10.8 to 30.0) | 19.2 (8.9 to 27.5) | +2.6% | 4.25 to 4.68 | not valid: before build ran -62% from the baseline |
+| `try-fibonacci-hash-run3` | Fibonacci hashing in the id map, third batch. Kept. | 49.6 (44.9 to 49.9) | 57.8 (53.7 to 60.8) | +16.5% | 3.91 to 3.91 | faster, ranges do not overlap |
+<!-- END generated -->
+
+* The A/A batch, one build against itself, differs by 0.5% at the median
+  with overlapping ranges.
+* Four of the six attempt batches are invalid. Two ran while another job
+  held three cores. Two ran during a twenty-second slowdown that cut both
+  builds to about a third of their speed. The validity rule was written
+  after those came back; before that the plan was to re-run once.
+* Fibonacci hashing is kept. In its valid batch every changed run beat every
+  unchanged run: +16.5% at the median, and mean latency from 32.5 to 27.7 ns.
+  The batch does not separate the two candidate causes, the shorter
+  dependency chain in front of each probe's load or fewer collisions from
+  the more even spacing it gives sequential ids.
+* Single-probe cancel stays reverted: +0.6% in its valid batch, inside the
+  noise. The second walk it removed was most likely in L1 already, and its
+  hash can be computed while the first probe's load is in flight.
+
+## Scale and endurance
+
+August 2026, timed pass, before runs recorded load:
+
+* Sharding (`--threads N`: one engine per thread on disjoint instruments,
+  nothing shared): aggregate throughput peaks at 84.7M ops/s with 8 shards
+  (`results/sharded.csv`). The per-shard rate falls from 24.5M at 2 shards
+  to 18.3M at 4 and 10.6M at 8. Shards share the memory system, and the M5
+  has 4 performance cores, so past 4 shards some run on efficiency cores.
+* Endurance: 100M operations, the book growing to 328k resting orders, with
+  the pool and id map sized for it (`--pool 524288 --idmap 1048576`):
+  18.6M ops/s, p99.9 333 ns, max 52 us, zero allocations
+  (`results/endurance.csv`). At default sizing the pool grew 4 times and an
+  id-map rehash took 23 ms in one operation. With the id map sized far past
+  the book, throughput fell to 13.3M ops/s, most likely because the table
+  no longer fit in cache.
+
+The same endurance run on 2026-10-22, with every allocation path counted, at
+a load average of 7.5: zero allocations, 11.8M ops/s, p99.9 2.0 us, max
+4.1 ms (`results/endurance_2026-10-22.txt`). The August latencies did not
+reproduce under that load.
+
+## Profiling
+
+macOS has no `perf`, and VMs on Apple Silicon do not expose the PMU.
+`scripts/profile.py` runs the README configuration 50 times under the
+built-in `sample` profiler and flattens self samples per source line:
 
 ```bash
-# what this repo's optimization attempts were chosen from: 50 runs of the
-# README configuration under the built-in `sample` profiler, flattened to
-# self samples per source line (needs only the Command Line Tools)
-./scripts/profile.py                         # untimed (throughput) pass
-./scripts/profile.py --frame run_ops_gated   # timed (latency) pass
+./scripts/profile.py                         # untimed pass
+./scripts/profile.py --frame run_ops_gated   # timed pass
 ```
 
 Inlined engine code is attributed to the harness line that called it, and
-an `isb` collects the stall time of the instructions before it, which is why
-the timed pass's profile is dominated by its timestamp reads.
+the stall time of the instructions before an `isb` lands on the `isb`, which
+is why the timed pass's profile is dominated by its counter reads.
+
+On bare-metal Linux, `perf stat` gives counters for the same run; divide by
+the measured operation count for per-operation figures:
 
 ```bash
-# Instruments counter template (requires full Xcode, not just CLT):
-xcrun xctrace record --template 'CPU Counters' \
-  --launch -- ./build/bench final --ops 1000000
-# then open the .trace bundle in Instruments
+taskset -c 3 perf stat -e cycles,instructions,branch-misses,\
+L1-dcache-load-misses,LLC-load-misses ./build/bench final --ops 1000000
 ```
 
-The Time Profiler template gives cycle attribution without raw counters. For
-serious counter work, run the same binary on a Linux x86 box: the workload is
-identical for a given seed, so each machine's before/after pairs are valid on
-that machine.
-
-Rule for this project: latency and throughput numbers quoted in the README
-come from one machine, one governor state, one seed. Counter analysis is a
-supplement, never a substitute for the latency percentiles.
+A given seed produces the same workload on any machine, so before and after
+pairs taken on one machine are comparable on that machine.
