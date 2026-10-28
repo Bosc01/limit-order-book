@@ -6,23 +6,15 @@
 
 namespace bench {
 
-// Raw monotonic tick source, chosen per architecture:
+// Raw tick source. Each read is fenced so it cannot execute ahead of the
+// instructions before it:
 //
-//   aarch64: CNTVCT_EL0, the ARM generic timer's virtual counter. Readable
-//     from userspace in a single instruction. The preceding `isb` is an
-//     instruction barrier: without it the CPU may hoist the counter read
-//     above the work we are trying to time (out-of-order execution does not
-//     respect our intent, only data dependencies).
-//     Granularity = 1/CNTFRQ. On Apple Silicon this is commonly 24 MHz,
-//     i.e. ~41.7 ns per tick -- we measure and report it rather than assume.
+//   aarch64: `isb; mrs cntvct_el0`. The counter's reported unit and its
+//     actual step can differ, so calibrate_clock() measures both.
+//   x86_64: `lfence; rdtsc`. Assumes an invariant TSC.
 //
-//   x86_64: RDTSC. Constant-rate ("invariant TSC") on all modern parts,
-//     sub-nanosecond granularity.
-//
-// Why not std::chrono::steady_clock in the hot loop? It bottoms out in a
-// libc call (mach_absolute_time / clock_gettime). That adds overhead *and
-// variance* to every sample, and variance in the measuring stick shows up
-// as fake tail latency in p99.9.
+// steady_clock stays out of the loop: it is a library call
+// (mach_absolute_time, clock_gettime) with its own cost and variance.
 inline std::uint64_t rdticks() {
 #if defined(__aarch64__)
     std::uint64_t v;
@@ -30,7 +22,7 @@ inline std::uint64_t rdticks() {
     return v;
 #elif defined(__x86_64__)
     std::uint32_t lo, hi;
-    asm volatile("rdtsc" : "=a"(lo), "=d"(hi));
+    asm volatile("lfence\n\trdtsc" : "=a"(lo), "=d"(hi));
     return (std::uint64_t(hi) << 32) | lo;
 #else
     return static_cast<std::uint64_t>(
@@ -44,9 +36,7 @@ struct ClockCalibration {
     double        resolution_ns;       // average step between distinct readings
 };
 
-// Calibrate ticks -> ns by running both clocks across a ~200 ms busy-wait
-// window. Busy-wait, not sleep: sleeping lets the core drop frequency and
-// can migrate the thread, both of which pollute the calibration.
+// ns per tick, from both clocks across a 200 ms spin.
 inline ClockCalibration calibrate_clock() {
     using namespace std::chrono;
 

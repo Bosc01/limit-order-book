@@ -43,7 +43,7 @@ struct Config {
     std::size_t warmup  = 100'000;
     std::uint64_t seed  = 42;
     std::string label   = "baseline";
-    std::string csv     = "results/bench.csv";
+    std::string csv;                 // empty: no CSV row
     std::string json;                // empty: no JSON record
     int         threads = 1; // shards; each runs its own engine instance
     std::size_t pool    = 1u << 17;          // final engine: order-pool slots
@@ -93,7 +93,7 @@ void print_row(const char* kind, const bench::Summary& s) {
 
 void append_csv(const Config& cfg, const char* kind, const bench::Summary& s,
                 double throughput) {
-    ::mkdir("results", 0755); // ok if it already exists
+    if (cfg.csv.empty()) return;
     FILE* f = std::fopen(cfg.csv.c_str(), "a");
     if (!f) { std::perror("fopen csv"); return; }
     // header only when the file is empty
@@ -180,9 +180,8 @@ void print_machine(const Machine& m) {
 }
 
 // --- JSON record of one run ---------------------------------------------
-// Hand-written on purpose: a handful of fields does not justify a JSON
-// library dependency. Strings come from the machine and the command line,
-// so they are escaped.
+// Hand-written; a few fields do not justify a JSON dependency. Strings come
+// from the machine and the command line, so they are escaped.
 
 std::string json_str(const std::string& v) {
     std::string out = "\"";
@@ -248,9 +247,7 @@ bool write_json(const Config& cfg, const Machine& m, const bench::ClockCalibrati
     return std::fclose(f) == 0;
 }
 
-// The final engine takes capacity parameters (pool slots, id-map slots) so
-// the endurance run can be sized for its session, which is the documented
-// production posture: growth is a safety valve, not a plan.
+// Only the final engine takes capacity parameters (--pool, --idmap).
 template <class Book>
 std::unique_ptr<Book> make_book(const Config&) {
     return std::make_unique<Book>();
@@ -261,11 +258,9 @@ std::unique_ptr<lob::OrderBook> make_book<lob::OrderBook>(const Config& cfg) {
         lob::Stp::None, cfg.pool, lob::Price{1}, lob::Price{1} << 15, cfg.idmap);
 }
 
-// Sharded mode: one engine instance per thread, no shared state, the way
-// real venues scale matching (one instrument, one engine, one core; cross-
-// instrument flow never contends). Aggregate throughput is measured
-// conservatively as total ops / wall time of the SLOWEST shard, from a
-// common start barrier.
+// Sharded mode: one engine per thread, nothing shared. Aggregate throughput
+// is total ops over the slowest shard's wall time, from a common start
+// barrier.
 template <class Book>
 int run_benchmark_sharded(const Config& cfg) {
     const auto cal = bench::calibrate_clock();
@@ -410,7 +405,7 @@ int run_benchmark(const Config& cfg, const Machine& machine) {
     std::printf("heap allocations in measured region: %llu (%.3f per op)\n",
                 (unsigned long long)allocs, double(allocs) / cfg.ops);
     std::printf("resting orders at end: %zu\n", rec.resting_at_end);
-    std::printf("csv appended: %s\n", cfg.csv.c_str());
+    if (!cfg.csv.empty()) std::printf("csv appended: %s\n", cfg.csv.c_str());
     if (!cfg.json.empty()) {
         if (!write_json(cfg, machine, cal, rec)) return 1;
         std::printf("json written: %s\n", cfg.json.c_str());

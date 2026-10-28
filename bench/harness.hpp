@@ -10,18 +10,15 @@
 
 namespace bench {
 
-// Compiler barrier: forces `v` to exist in a register/memory at this point,
-// so the optimizer cannot delete the book operations as dead code. Costs
-// zero instructions -- it only constrains scheduling.
+// Compiler barrier: `v` must exist at this point, so the optimizer cannot
+// drop the operation that produced it. It emits no instructions, but the
+// memory clobber can force values to be stored and reloaded around it.
 template <class T>
 inline void do_not_optimize(T v) {
     asm volatile("" : "+r"(v) : : "memory");
 }
 
-// The harness is a template, not an interface with virtual calls: virtual
-// dispatch would add an indirect call to every measured sample and, worse,
-// act as an optimization barrier around the very code we are measuring.
-// Each engine gets compiled into its own fully-inlined copy of this loop.
+// A template, so each engine gets its own inlined copy of the loop.
 template <class Book>
 inline lob::Qty dispatch(Book& book, const Op& op) {
     // Each arm folds the result into a value the barrier consumes, so the

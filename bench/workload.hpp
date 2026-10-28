@@ -31,16 +31,14 @@ struct Op {
 // for a benchmark workload).
 //
 // Op mix (per 100 ops): 45 passive limit, 10 aggressive (crossing) limit,
-// 5 market, 30 cancel, 10 modify. Cancel/modify-heavy on purpose: real
-// venues see far more cancels and amends than trades (cancel-to-trade
-// ratios above 10:1 are normal), and those are exactly the operations the
-// naive book does worst. Aggressive limits carry a TIF mix (70% GTC,
-// 20% IOC, 10% FOK); passive orders are GTC.
+// 5 market, 30 cancel, 10 modify. Aggressive limits are 70% GTC, 20% IOC,
+// 10% FOK; passive orders are GTC. That is about two cancels per taker
+// order. Real order flow is far more cancel-heavy, so this mix spends more
+// of its time in the match loop than a venue's would.
 //
-// The generator does not simulate matching, so a cancel/modify may target
-// an already-filled order. That is realistic -- a cancel racing a fill loses
-// at real exchanges too -- and it keeps generation a pure function of the
-// seed, so every engine version replays the identical byte-for-byte stream.
+// The generator does not simulate matching, so a cancel or modify may
+// target an order that already filled. That keeps the stream a pure
+// function of the seed, identical for every engine.
 class WorkloadGen {
 public:
     explicit WorkloadGen(std::uint64_t seed) : rng_(seed) {}
@@ -135,8 +133,8 @@ private:
     }
 
     void track(lob::OrderId id, lob::Side s, lob::Price px) {
-        // Cap the target pool so cancels/modifies skew toward recent orders,
-        // which mirrors real flow (most cancels hit young orders).
+        // Cap the target pool so cancels and modifies skew toward recent
+        // orders. Evicted orders are never canceled, so the book grows.
         if (live_.size() >= 50'000) {
             const std::size_t j = draw() % live_.size();
             live_[j] = live_.back();

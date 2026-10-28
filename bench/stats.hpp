@@ -13,10 +13,8 @@ struct Summary {
     std::uint64_t p50 = 0, p90 = 0, p99 = 0, p999 = 0, max = 0;
 };
 
-// Nearest-rank percentile on a sorted vector. We keep every sample and sort
-// once at the end (exact percentiles) instead of using a histogram
-// (approximate). At benchmark scale -- millions of 8-byte samples -- the
-// memory cost is trivial and exactness beats cleverness.
+// The sample at index round(q * (n - 1)) of the sorted vector. Every sample
+// is kept, so percentiles are exact rather than histogram estimates.
 inline std::uint64_t percentile(const std::vector<std::uint64_t>& sorted, double q) {
     if (sorted.empty()) return 0;
     const auto idx = static_cast<std::size_t>(
