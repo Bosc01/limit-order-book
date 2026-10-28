@@ -3,6 +3,7 @@
 // keeping the parser pure.
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <random>
 #include <vector>
@@ -167,6 +168,37 @@ TEST(Framing, RandomGarbageNeverCrashes) {
             });
         }
     }
+}
+
+TEST(Framing, RandomFramesSurviveRandomChunking) {
+    // Garbage almost always fails on its first length prefix, so the test
+    // above barely reaches reassembly. Here every prefix is valid: random
+    // lengths up to kMaxFrameLen and random bodies, fed in chunks from one
+    // byte to more than the buffer holds, so frames straddle chunks and the
+    // partial-frame shift runs constantly.
+    std::mt19937_64 rng(7);
+    std::vector<std::uint8_t> stream;
+    std::vector<std::vector<std::uint8_t>> sent;
+    for (int f = 0; f < 2000; ++f) {
+        const auto len = static_cast<std::uint16_t>(1 + rng() % kMaxFrameLen);
+        std::vector<std::uint8_t> body(len);
+        for (auto& b : body) b = std::uint8_t(rng());
+        stream.push_back(std::uint8_t(len));
+        stream.push_back(std::uint8_t(len >> 8));
+        stream.insert(stream.end(), body.begin(), body.end());
+        sent.push_back(std::move(body));
+    }
+    FrameBuffer fb;
+    std::vector<std::vector<std::uint8_t>> got;
+    for (std::size_t pos = 0; pos < stream.size();) {
+        const std::size_t n = std::min<std::size_t>(1 + rng() % 5000, stream.size() - pos);
+        ASSERT_TRUE(fb.feed(stream.data() + pos, n,
+                            [&](const std::uint8_t* b, std::size_t len) {
+                                got.emplace_back(b, b + len);
+                            }));
+        pos += n;
+    }
+    EXPECT_EQ(got, sent);
 }
 
 } // namespace
