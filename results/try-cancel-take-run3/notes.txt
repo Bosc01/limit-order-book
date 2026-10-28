@@ -1,0 +1,2 @@
+before Commit 4e6678f, the baseline engine.
+after cancel takes its id-map entry with one probe walk, third batch. Stays reverted.

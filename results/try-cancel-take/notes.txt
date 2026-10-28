@@ -1,2 +1,2 @@
 before Commit 4e6678f, the baseline engine.
-after cancel takes its id-map entry with one probe walk instead of find and then erase. Reverted: no clear change.
+after cancel takes its id-map entry with one probe walk instead of find and then erase. Another job held three cores; the code was reverted after this batch.

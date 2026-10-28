@@ -1,0 +1,2 @@
+before Commit 4e6678f, the baseline engine.
+after Fibonacci hashing in the id map, second batch. Both builds ran about a third as fast as a minute later.

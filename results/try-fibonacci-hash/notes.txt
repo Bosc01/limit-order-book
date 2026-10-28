@@ -1,0 +1,2 @@
+before Commit 4e6678f, the baseline engine.
+after Fibonacci hashing in the id map. Another job held three cores during the batch.

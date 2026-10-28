@@ -1,0 +1,230 @@
+===== before run 1: bench final --ops 2000000 --warmup 100000 =====
+ -InternalBattery-0 (id=34996323)	23%; discharging; 0:34 remaining present: true
+machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), Release, optimized
+flags: -std=c++20 -O3 -DNDEBUG -O3 -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic
+load average at start: 3.91 5.84 6.08
+clock: 1.0000 ns per counter unit, resolution 41.6 ns, read overhead ~0 ns
+workload: 2100000 ops (100000 warmup + 2000000 measured), seed 42
+
+engine=final label=try-fibonacci-hash-run3/before-1
+  kind         count     mean_ns      p50      p90      p99    p99.9        max
+  limit      1099220          32       41       42      125      208       7017
+  market      100021          35       42       42       84      166       1750
+  cancel      600984          31       41       42       84      125       7125
+  modify      199775          38       42       83      125      167       2000
+  ALL        2000000          33       41       42       84      167       7125
+
+throughput, timed pass:   23344350 ops/s (0.09 s wall for 2000000 ops)
+throughput, untimed pass: 49725422 ops/s (0.04 s wall, same ops, fresh book)
+heap allocations in measured region: 0 (0.000 per op)
+resting orders at end: 60225
+csv appended: /dev/null
+json written: results/try-fibonacci-hash-run3/before-1.json
+===== after run 1: bench final --ops 2000000 --warmup 100000 =====
+ -InternalBattery-0 (id=34996323)	23%; discharging; 0:34 remaining present: true
+machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), Release, optimized
+flags: -std=c++20 -O3 -DNDEBUG -O3 -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic
+load average at start: 3.91 5.84 6.08
+clock: 1.0000 ns per counter unit, resolution 41.7 ns, read overhead ~0 ns
+workload: 2100000 ops (100000 warmup + 2000000 measured), seed 42
+
+engine=final label=try-fibonacci-hash-run3/after-1
+  kind         count     mean_ns      p50      p90      p99    p99.9        max
+  limit      1099220          27       41       42       84      125       9625
+  market      100021          29       41       42       84      125        791
+  cancel      600984          26       41       42       83      125       2208
+  modify      199775          33       41       42       84      125       1625
+  ALL        2000000          28       41       42       84      125       9625
+
+throughput, timed pass:   26458774 ops/s (0.08 s wall for 2000000 ops)
+throughput, untimed pass: 57638481 ops/s (0.03 s wall, same ops, fresh book)
+heap allocations in measured region: 0 (0.000 per op)
+resting orders at end: 60225
+csv appended: /dev/null
+json written: results/try-fibonacci-hash-run3/after-1.json
+===== after run 2: bench final --ops 2000000 --warmup 100000 =====
+ -InternalBattery-0 (id=34996323)	23%; discharging; 0:34 remaining present: true
+machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), Release, optimized
+flags: -std=c++20 -O3 -DNDEBUG -O3 -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic
+load average at start: 3.91 5.84 6.08
+clock: 1.0000 ns per counter unit, resolution 41.7 ns, read overhead ~0 ns
+workload: 2100000 ops (100000 warmup + 2000000 measured), seed 42
+
+engine=final label=try-fibonacci-hash-run3/after-2
+  kind         count     mean_ns      p50      p90      p99    p99.9        max
+  limit      1099220          27       41       42       83      125       8708
+  market      100021          29       41       42       83      125       1625
+  cancel      600984          27       41       42       42       84       8392
+  modify      199775          33       42       42       84      125        750
+  ALL        2000000          28       41       42       83      125       8708
+
+throughput, timed pass:   26612274 ops/s (0.08 s wall for 2000000 ops)
+throughput, untimed pass: 60252684 ops/s (0.03 s wall, same ops, fresh book)
+heap allocations in measured region: 0 (0.000 per op)
+resting orders at end: 60225
+csv appended: /dev/null
+json written: results/try-fibonacci-hash-run3/after-2.json
+===== before run 2: bench final --ops 2000000 --warmup 100000 =====
+ -InternalBattery-0 (id=34996323)	23%; discharging; 0:34 remaining present: true
+machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), Release, optimized
+flags: -std=c++20 -O3 -DNDEBUG -O3 -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic
+load average at start: 3.91 5.84 6.08
+clock: 1.0000 ns per counter unit, resolution 41.7 ns, read overhead ~0 ns
+workload: 2100000 ops (100000 warmup + 2000000 measured), seed 42
+
+engine=final label=try-fibonacci-hash-run3/before-2
+  kind         count     mean_ns      p50      p90      p99    p99.9        max
+  limit      1099220          31       41       42       84      167       8708
+  market      100021          33       42       42       84      125       1959
+  cancel      600984          30       41       42       83      101       1625
+  modify      199775          36       42       42       84      125       1084
+  ALL        2000000          31       41       42       84      166       8708
+
+throughput, timed pass:   24339240 ops/s (0.08 s wall for 2000000 ops)
+throughput, untimed pass: 49549052 ops/s (0.04 s wall, same ops, fresh book)
+heap allocations in measured region: 0 (0.000 per op)
+resting orders at end: 60225
+csv appended: /dev/null
+json written: results/try-fibonacci-hash-run3/before-2.json
+===== before run 3: bench final --ops 2000000 --warmup 100000 =====
+ -InternalBattery-0 (id=34996323)	23%; discharging; 0:34 remaining present: true
+machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), Release, optimized
+flags: -std=c++20 -O3 -DNDEBUG -O3 -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic
+load average at start: 3.91 5.84 6.08
+clock: 1.0000 ns per counter unit, resolution 41.7 ns, read overhead ~0 ns
+workload: 2100000 ops (100000 warmup + 2000000 measured), seed 42
+
+engine=final label=try-fibonacci-hash-run3/before-3
+  kind         count     mean_ns      p50      p90      p99    p99.9        max
+  limit      1099220          32       41       42       84      250      11833
+  market      100021          35       42       42       84      167      15101
+  cancel      600984          31       41       42       84      125      11726
+  modify      199775          38       42       83       84      167       1375
+  ALL        2000000          33       41       42       84      208      15101
+
+throughput, timed pass:   23372245 ops/s (0.09 s wall for 2000000 ops)
+throughput, untimed pass: 49874845 ops/s (0.04 s wall, same ops, fresh book)
+heap allocations in measured region: 0 (0.000 per op)
+resting orders at end: 60225
+csv appended: /dev/null
+json written: results/try-fibonacci-hash-run3/before-3.json
+===== after run 3: bench final --ops 2000000 --warmup 100000 =====
+ -InternalBattery-0 (id=34996323)	23%; discharging; 0:34 remaining present: true
+machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), Release, optimized
+flags: -std=c++20 -O3 -DNDEBUG -O3 -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic
+load average at start: 3.91 5.84 6.08
+clock: 1.0000 ns per counter unit, resolution 41.7 ns, read overhead ~0 ns
+workload: 2100000 ops (100000 warmup + 2000000 measured), seed 42
+
+engine=final label=try-fibonacci-hash-run3/after-3
+  kind         count     mean_ns      p50      p90      p99    p99.9        max
+  limit      1099220          27       41       42       83      125       8833
+  market      100021          29       41       42       83      101       9334
+  cancel      600984          26       41       42       42       84       1476
+  modify      199775          33       41       42       84      125       5000
+  ALL        2000000          27       41       42       83      125       9334
+
+throughput, timed pass:   26852110 ops/s (0.07 s wall for 2000000 ops)
+throughput, untimed pass: 57801171 ops/s (0.03 s wall, same ops, fresh book)
+heap allocations in measured region: 0 (0.000 per op)
+resting orders at end: 60225
+csv appended: /dev/null
+json written: results/try-fibonacci-hash-run3/after-3.json
+===== after run 4: bench final --ops 2000000 --warmup 100000 =====
+ -InternalBattery-0 (id=34996323)	23%; discharging; 0:34 remaining present: true
+machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), Release, optimized
+flags: -std=c++20 -O3 -DNDEBUG -O3 -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic
+load average at start: 3.91 5.84 6.08
+clock: 1.0000 ns per counter unit, resolution 41.6 ns, read overhead ~0 ns
+workload: 2100000 ops (100000 warmup + 2000000 measured), seed 42
+
+engine=final label=try-fibonacci-hash-run3/after-4
+  kind         count     mean_ns      p50      p90      p99    p99.9        max
+  limit      1099220          28       41       42       84      125       9667
+  market      100021          30       41       42       84      125       1500
+  cancel      600984          27       41       42       83       84       1500
+  modify      199775          34       42       42       84      125       1583
+  ALL        2000000          28       41       42       84      125       9667
+
+throughput, timed pass:   25676852 ops/s (0.08 s wall for 2000000 ops)
+throughput, untimed pass: 60793354 ops/s (0.03 s wall, same ops, fresh book)
+heap allocations in measured region: 0 (0.000 per op)
+resting orders at end: 60225
+csv appended: /dev/null
+json written: results/try-fibonacci-hash-run3/after-4.json
+===== before run 4: bench final --ops 2000000 --warmup 100000 =====
+ -InternalBattery-0 (id=34996323)	23%; discharging; 0:34 remaining present: true
+machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), Release, optimized
+flags: -std=c++20 -O3 -DNDEBUG -O3 -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic
+load average at start: 3.91 5.84 6.08
+clock: 1.0000 ns per counter unit, resolution 41.7 ns, read overhead ~0 ns
+workload: 2100000 ops (100000 warmup + 2000000 measured), seed 42
+
+engine=final label=try-fibonacci-hash-run3/before-4
+  kind         count     mean_ns      p50      p90      p99    p99.9        max
+  limit      1099220          31       41       42       84      125       1500
+  market      100021          34       42       42       84      125       1709
+  cancel      600984          31       41       42       83       84       9375
+  modify      199775          37       42       83       84      125       1500
+  ALL        2000000          32       41       42       84      125       9375
+
+throughput, timed pass:   24030399 ops/s (0.08 s wall for 2000000 ops)
+throughput, untimed pass: 49600868 ops/s (0.04 s wall, same ops, fresh book)
+heap allocations in measured region: 0 (0.000 per op)
+resting orders at end: 60225
+csv appended: /dev/null
+json written: results/try-fibonacci-hash-run3/before-4.json
+===== before run 5: bench final --ops 2000000 --warmup 100000 =====
+ -InternalBattery-0 (id=34996323)	23%; discharging; 0:34 remaining present: true
+machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), Release, optimized
+flags: -std=c++20 -O3 -DNDEBUG -O3 -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic
+load average at start: 3.91 5.84 6.08
+clock: 1.0000 ns per counter unit, resolution 41.7 ns, read overhead ~0 ns
+workload: 2100000 ops (100000 warmup + 2000000 measured), seed 42
+
+engine=final label=try-fibonacci-hash-run3/before-5
+  kind         count     mean_ns      p50      p90      p99    p99.9        max
+  limit      1099220          35       42       42      125      208       5559
+  market      100021          37       42       42      125      167        917
+  cancel      600984          34       42       42       84      167       9893
+  modify      199775          41       42       83      125      208       1542
+  ALL        2000000          35       42       42      125      167       9893
+
+throughput, timed pass:   21625859 ops/s (0.09 s wall for 2000000 ops)
+throughput, untimed pass: 44939528 ops/s (0.04 s wall, same ops, fresh book)
+heap allocations in measured region: 0 (0.000 per op)
+resting orders at end: 60225
+csv appended: /dev/null
+json written: results/try-fibonacci-hash-run3/before-5.json
+===== after run 5: bench final --ops 2000000 --warmup 100000 =====
+ -InternalBattery-0 (id=34996323)	23%; discharging; 0:34 remaining present: true
+machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), Release, optimized
+flags: -std=c++20 -O3 -DNDEBUG -O3 -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic
+load average at start: 3.91 5.84 6.08
+clock: 1.0000 ns per counter unit, resolution 41.7 ns, read overhead ~0 ns
+workload: 2100000 ops (100000 warmup + 2000000 measured), seed 42
+
+engine=final label=try-fibonacci-hash-run3/after-5
+  kind         count     mean_ns      p50      p90      p99    p99.9        max
+  limit      1099220          30       41       42       84      208       9435
+  market      100021          33       42       42       84      166       6333
+  cancel      600984          30       41       42       83      125       5417
+  modify      199775          37       42       83       84      167       1834
+  ALL        2000000          31       41       42       84      167       9435
+
+throughput, timed pass:   23691256 ops/s (0.08 s wall for 2000000 ops)
+throughput, untimed pass: 53693377 ops/s (0.04 s wall, same ops, fresh book)
+heap allocations in measured region: 0 (0.000 per op)
+resting orders at end: 60225
+csv appended: /dev/null
+json written: results/try-fibonacci-hash-run3/after-5.json

@@ -1,0 +1,24 @@
+{
+  "name": "try-fibonacci-hash-rerun/after-1",
+  "engine": "final",
+  "recorded_utc": "2026-10-28T00:37:00Z",
+  "seed": 42,
+  "measured_ops": 2000000,
+  "warmup_ops": 100000,
+  "machine": {"cpu": "Apple M5", "cores": "10 logical cores (4 performance, 6 efficiency)", "os": "Darwin 25.6.0 arm64", "load_average": [4.31, 6.40, 6.27]},
+  "build": {"compiler": "Apple LLVM 17.0.0 (clang-1700.6.3.2)", "build_type": "Release", "optimized": true, "flags": "-std=c++20 -O3 -DNDEBUG -O3 -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic"},
+  "timer": {"ns_per_unit": 1.0000, "resolution_ns": 41.6},
+  "throughput_ops_per_s": 4973445,
+  "wall_seconds": 0.4021,
+  "untimed_throughput_ops_per_s": 9157086,
+  "untimed_wall_seconds": 0.2184,
+  "heap_allocations": 0,
+  "resting_orders_at_end": 60225,
+  "latency": {
+    "all": {"count": 2000000, "mean_ns": 173.5, "p50_ns": 125, "p90_ns": 292, "p99_ns": 542, "p999_ns": 1375, "max_ns": 3731079},
+    "limit": {"count": 1099220, "mean_ns": 180.9, "p50_ns": 125, "p90_ns": 292, "p99_ns": 541, "p999_ns": 1791, "max_ns": 3731079},
+    "market": {"count": 100021, "mean_ns": 169.3, "p50_ns": 125, "p90_ns": 291, "p99_ns": 459, "p999_ns": 1208, "max_ns": 245016},
+    "cancel": {"count": 600984, "mean_ns": 158.0, "p50_ns": 125, "p90_ns": 292, "p99_ns": 542, "p999_ns": 1041, "max_ns": 1428284},
+    "modify": {"count": 199775, "mean_ns": 181.2, "p50_ns": 125, "p90_ns": 333, "p99_ns": 625, "p999_ns": 1250, "max_ns": 821183}
+  }
+}
