@@ -1,4 +1,5 @@
 #pragma once
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -36,11 +37,12 @@ public:
         std::size_t n = 16;
         while (n < min_slots) n <<= 1; // power of two: mask instead of modulo
         slots_.resize(n);
-        mask_ = n - 1;
+        mask_  = n - 1;
+        shift_ = 64 - std::countr_zero(n);
     }
 
     V* find(OrderId k) {
-        std::size_t i = hash(k) & mask_;
+        std::size_t i = home(k);
         while (slots_[i].key != 0) {
             if (slots_[i].key == k) return &slots_[i].val;
             i = (i + 1) & mask_;
@@ -51,7 +53,7 @@ public:
     // Returns false (and changes nothing) if the key is already present.
     bool insert(OrderId k, V v) {
         if ((count_ + 1) * 2 > slots_.size()) grow(); // keeps load <= 0.5
-        std::size_t i = hash(k) & mask_;
+        std::size_t i = home(k);
         while (slots_[i].key != 0) {
             if (slots_[i].key == k) return false;
             i = (i + 1) & mask_;
@@ -62,7 +64,7 @@ public:
     }
 
     bool erase(OrderId k) {
-        std::size_t i = hash(k) & mask_;
+        std::size_t i = home(k);
         while (slots_[i].key != k) {
             if (slots_[i].key == 0) return false;
             i = (i + 1) & mask_;
@@ -76,7 +78,7 @@ public:
         while (true) {
             j = (j + 1) & mask_;
             if (slots_[j].key == 0) break;
-            const std::size_t ideal = hash(slots_[j].key) & mask_;
+            const std::size_t ideal = home(slots_[j].key);
             if (in_cyclic_range(ideal, hole, j)) {
                 slots_[hole] = slots_[j];
                 hole         = j;
@@ -97,18 +99,15 @@ private:
         V       val{};
     };
 
-    // splitmix64 finalizer: cheap, and crucially it scatters SEQUENTIAL ids
-    // (which is what gateways generate) across the table. Identity hashing
-    // sequential keys would fill the table in runs and make probe clusters
-    // explode.
-    static std::uint64_t hash(OrderId k) {
-        std::uint64_t x = k;
-        x ^= x >> 33;
-        x *= 0xff51afd7ed558ccdull;
-        x ^= x >> 33;
-        x *= 0xc4ceb9fe1a85ec53ull;
-        x ^= x >> 33;
-        return x;
+    // Home slot of a key, by Fibonacci hashing: multiply by 2^64 divided by
+    // the golden ratio and keep the top log2(slots) bits. One multiply, and
+    // it still scatters SEQUENTIAL ids (which is what gateways generate):
+    // any run of consecutive ids splits the table into gaps of at most three
+    // sizes, and the golden ratio keeps those sizes as close to equal as any
+    // multiplier can (the three-gap theorem). Identity hashing sequential
+    // keys would fill the table in runs and make probe clusters explode.
+    std::size_t home(OrderId k) const {
+        return static_cast<std::size_t>((k * 0x9E3779B97F4A7C15ull) >> shift_);
     }
 
     // Is `i` in the cyclic half-open range [ideal, j)?
@@ -121,6 +120,7 @@ private:
         std::vector<Slot> old = std::move(slots_);
         slots_.assign(old.size() * 2, Slot{});
         mask_  = slots_.size() - 1;
+        shift_ = 64 - std::countr_zero(slots_.size());
         count_ = 0;
         ++grows_;
         for (const Slot& s : old)
@@ -129,6 +129,7 @@ private:
 
     std::vector<Slot> slots_;
     std::size_t       mask_  = 0;
+    int               shift_ = 64; // 64 - log2(slot count)
     std::size_t       count_ = 0;
     std::size_t       grows_ = 0;
 };
