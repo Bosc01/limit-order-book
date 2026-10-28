@@ -10,21 +10,28 @@ allocations, and the benchmark proves it on every run.
 
 Headline numbers on Apple M5, single thread: the median of five runs of 2M
 operations each (seed 42; 45% passive limit, 10% aggressive limit, 5%
-market, 30% cancel, 10% modify). The machine, its load, and every run are
-in [Benchmark](#benchmark).
+market, 30% cancel, 10% modify). Throughput comes from an untimed pass over
+the operations; latency comes from a second pass that timestamps every
+operation, and those timestamps cost throughput of their own (second row).
+The machine, its load, and every run are in [Benchmark](#benchmark).
 
+<!-- BEGIN generated: headline final-2026-10-27 final -->
 | metric | value |
 |---|---|
-| throughput | 24.1M ops/s |
-| mean latency | 31.5 ns |
-| p50 / p99 / p99.9 | 41 / 84 / 250 ns |
-| heap allocations per op | zero, in every run |
-| tests | 420, at 98.2% line coverage (llvm-cov) |
+| throughput | 51.0M ops/s |
+| throughput with a timestamp around every op | 22.1M ops/s |
+| mean latency | 33.4 ns |
+| p50 / p99 / p99.9 | 42 / 84 / 208 ns |
+| heap allocations in the measured region | zero in 5 of 5 runs |
+<!-- END generated -->
 
-These were measured with two other processes each holding a core. In August
-2026, before the benchmark recorded load, the same engine on the same
-machine measured 27M ops/s, a 28 ns mean, and a 166 ns p99.9
-(`results/final_2m.csv`).
+Tests: 420, at 98.2% line coverage (llvm-cov). Every benchmark table in
+this README is generated from the saved runs in `results/` by
+`scripts/results.py`, and CI fails if a table drifts from them.
+
+In August 2026, on a quieter machine, the same engine measured 27M ops/s
+with per-op timestamps, a 28 ns mean, and a 166 ns p99.9
+(`results/final_2m.csv`); the untimed pass did not exist yet.
 
 ## Architecture
 
@@ -102,9 +109,8 @@ of either, re-checked with every allocation path counted in
 grid inside a bounded band, so an array index already sorts them. The
 `std::map` version (`engines/book_v1.hpp`) pays O(log L) to insert a new
 level and to erase a level emptied by a cancel, chasing tree nodes scattered
-across the heap. Switching to the flat ladder took the mean from 39.9 to 36.0 ns
-and throughput from 20.5M to 22.3M ops/s (v4 to v5 in the next table,
-medians of five runs). The price is the band: orders outside it are
+across the heap. The switch is the v4 to v5 step in the
+[progression table](#the-measured-optimization-story). The price is the band: orders outside it are
 rejected, and empty levels still cost memory, one 64-byte line per tick per
 side, about 2 MB per side at the default band.
 
@@ -118,88 +124,165 @@ to the matching loop and keep dead orders in memory, for no gain.
 
 ## Benchmark
 
-Reproduce this table with one command after building (see
-[Build and run](#build-and-run)):
+Reproduce with one command after building (see
+[Build and run](#build-and-run)), then regenerate every table in this README
+from the saved runs:
 
 ```bash
-./scripts/bench_report.sh build
+./scripts/bench_report.sh mine final=build
+python3 scripts/results.py readme
 ```
 
-The script runs the final engine five times (2M measured operations each,
-after 100k warmup, seed 42), saves every run's full output and CSV rows
-under `results/`, and prints the median of each figure. The table below is
-`results/bench_2026-10-22.txt`:
+The first command runs the final engine five times (2M measured operations
+each, after 100k warmup, seed 42) and saves each run as one JSON file under
+`results/mine/`, with the full printout and the commit it was built from.
+The second rewrites the generated blocks of this README from `results/`;
+with `--check` it only reports drift, which is how CI runs it. The figures
+below are `results/final-2026-10-27/`:
 
+<!-- BEGIN generated: operations final-2026-10-27 final -->
 ```
 machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
-build: Apple LLVM 17.0.0 (clang-1700.6.3.2), optimized
-timer resolution: 41.6 ns
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), Release
+flags: -std=c++20 -O3 -DNDEBUG -O3 -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic
+timer resolution: 42.7 ns
 ```
 
 | operation | mean ns | p50 | p99 | p99.9 |
 |---|---|---|---|---|
-| all | 31.5 | 41 | 84 | 250 |
-| limit | 31.1 | 41 | 84 | 500 |
-| market | 33.5 | 42 | 84 | 542 |
-| cancel | 30.0 | 41 | 83 | 125 |
-| modify | 36.8 | 42 | 84 | 250 |
+| all | 33.4 | 42 | 84 | 208 |
+| limit | 32.9 | 41 | 125 | 209 |
+| market | 35.1 | 42 | 84 | 167 |
+| cancel | 32.0 | 41 | 84 | 125 |
+| modify | 39.6 | 42 | 125 | 167 |
 
-Throughput: median 24.1M orders per second; the five runs ranged from
-23.96M to 24.48M. Heap allocations in the measured region: zero in all five
-runs.
+Throughput, untimed pass: median 51.0M ops/s, runs from 47.6M to 53.2M. With a timestamp around every op: median 22.1M, runs from 19.9M to 23.6M. Load average at the start of each run: 3.76 to 3.83. Every run is in `results/final-2026-10-27/`, built from commit `eefb3a6`.
+<!-- END generated -->
 
-Conditions, stated because they move the numbers: the load average was 4.2 to
-4.3 at the start of every run, two unrelated processes each held a core at about
-100% CPU, and the laptop was on battery. An earlier five-run batch the same
-day, taken before this script existed, had two runs at 10.6M and 12.5M ops/s,
-possibly from the scheduler moving the benchmark onto an efficiency core. A
-user-interactive QoS hint meant to keep it on performance cores made A/B
-results worse, so it is not used. The p50 sits at the timer's 41.6 ns
-resolution; the means and tails carry the finer information.
+Each run makes two passes over the same operations, each on a fresh book.
+The timed pass reads the hardware counter before and after every operation
+and gives the latency figures. Those reads sit behind an `isb` instruction
+barrier, which drains the pipeline, so the timed pass cannot overlap one
+operation's cache misses with the next operation's work; in a profile of the
+timed loop, 61.7% of samples land on the two reads (`results/profiles/`).
+The untimed pass runs the same operations with no timestamps and gives the
+throughput. It must end with the same book as the timed pass, or the run
+fails.
+
+Conditions, stated because they move the numbers: every batch dated
+2026-10-27 in `results/` ran on battery power, per the system power log, and
+batches recorded after commit c662000 also log the battery line before each
+run in their `output.txt`. The Bluetooth daemon and an RStudio session each
+held a core at about 100% throughout. Batch-to-batch drift under these
+conditions is large: the same final engine measured 57.8M ops/s untimed in
+one batch (`results/try-fibonacci-hash-run3/`) and 51.0M in this one, minutes
+apart. That is why a change is only judged inside one interleaved batch. The
+p50 sits at the timer's resolution of about 42 ns; the means and tails carry
+the finer information.
 
 ## The measured optimization story
 
 Seven engines share one replayable workload (seed 42). `naive` is the
 deliberately slow baseline and the semantic reference; each `v_n` changes ONE
-thing. Measured in August 2026 on the same machine, before runs recorded
-load. Medians over 5 runs, 200k measured ops each:
+thing. Re-measured on 2026-10-27, five interleaved runs per engine of 200k
+measured operations each (`results/progression-2026-10-27/`). The count is
+200k rather than 2M because `naive` slows as its book grows: one 2M run of it
+took over eight minutes.
 
-| engine | change | mean ns | p50 | p90 | p99 | p99.9 | Mops/s | allocs/op |
-|---|---|---|---|---|---|---|---|---|
-| naive | std::map + std::list, O(n) cancel | 7459 | 42 | 24393 | 53035 | 70594 | 0.13 | 0.44 |
-| v1 | map ladder + intrusive list + hash index | 48.6 | 42 | 84 | 125 | 250 | 17.39 | 0.88 |
-| v2 | + slab pool for orders | 40.0 | 42 | 83 | 125 | 167 | 20.47 | 0.44 |
-| v3 | + cache-line Order layout | 40.1 | 42 | 83 | 125 | 167 | 20.46 | 0.44 |
-| v4 | + branch discipline in match loop | 39.9 | 42 | 83 | 125 | 167 | 20.53 | 0.44 |
-| v5 | + flat banded ladder with bitmap | 36.0 | 42 | 42 | 84 | 167 | 22.27 | 0.44 |
-| final | + open-addressing id map | 25.5 | 41 | 42 | 83 | 125 | 29.13 | 0.000 |
+<!-- BEGIN generated: progression progression-2026-10-27 -->
+| engine | change | untimed Mops/s | against previous | timed Mops/s | mean ns | p50 | p90 | p99 | p99.9 | allocs per op |
+|---|---|---|---|---|---|---|---|---|---|---|
+| naive | std::map + std::list, O(n) cancel | 0.12 (0.11 to 0.13) |  | 0.13 | 7908.5 | 83 | 27517 | 60035 | 83845 | 0.401 |
+| v1 | map ladder, intrusive list, hash index | 20.8 (20.5 to 21.9) | +17077% | 14.1 | 59.8 | 42 | 84 | 167 | 292 | 0.796 |
+| v2 | + slab pool for orders | 25.9 (23.5 to 27.8) | +25% | 16.3 | 50.3 | 42 | 84 | 125 | 209 | 0.401 |
+| v3 | + cache-line Order layout | 26.1 (25.7 to 26.4) | +1%, ranges overlap | 16.3 | 50.3 | 42 | 84 | 125 | 209 | 0.401 |
+| v4 | + branch discipline in the match loop | 26.5 (25.5 to 28.3) | +2%, ranges overlap | 16.4 | 49.8 | 42 | 84 | 125 | 209 | 0.401 |
+| v5 | + flat banded ladder with bitmap | 29.7 (20.6 to 29.8) | +12%, ranges overlap | 17.5 | 46.1 | 42 | 83 | 125 | 250 | 0.395 |
+| final | + open-addressing id map, Fibonacci hash | 63.9 (55.6 to 64.6) | +115% | 21.0 | 36.4 | 41 | 83 | 125 | 209 | 0.000 |
+<!-- END generated -->
 
 Honest readings, including the failures:
 
-* **v2, the pool, is a real win**: +18% throughput, tighter p99.9. Malloc was
-  paying size-class bookkeeping and scattering orders across the heap.
-* **v3, alignment, measured neutral.** The five-run spreads overlap
-  completely. The working set fits in cache and the pool already delivers
-  locality, so straddle-avoidance had nothing left to save. Kept because it
-  costs 14% memory for insurance the profile cannot show on this machine.
-* **v4, branch elimination, also neutral** (within run-to-run spread across
-  repeated five-run batches). The lesson is worth more than a win: on a wide
-  out-of-order core, well-predicted branches are nearly free, so removing
-  them buys nothing measurable. The STP specialization (checks compiled out
-  when the policy is off) is kept for the configurability, on the evidence
-  that it costs nothing.
-* **v5, the flat ladder, is a modest real win**: p90 halves and p99 drops a
-  granule; the new tail source (the bitmap rescan after a best level
-  empties) shows up in occasional runs as a fatter p99.9.
-* **The final id map is the biggest post-v1 win**: +31% throughput, p99.9
-  down to 125 ns, max latency collapses from ~57 us to ~8 us, and
-  allocations hit exactly zero. The general-purpose allocator was the
-  dominant remaining noise source, reached through std::unordered_map's
-  per-node behavior.
+* **v2, the slab pool, is a real win**: every v2 run beat every v1 run.
+  Malloc was paying size-class bookkeeping and scattering orders across the
+  heap.
+* **v3, alignment, and v4, branch discipline, are no clear change**, as they
+  were in August. The working set fits in cache and the pool already
+  delivers locality, so straddle-avoidance has nothing left to save; on a
+  wide out-of-order core, well-predicted branches are nearly free. Both stay
+  in the code, on the evidence that they cost nothing measurable.
+* **v5, the flat ladder, raises the median, but one slow v5 run overlaps
+  v4's range**, so by this README's rule it is not a clear win in this batch.
+  August's batch showed it as a modest win. Its new tail source is the
+  bitmap rescan after a best level empties.
+* **The final engine is the biggest step after v1**, more than doubling
+  untimed throughput over v5, and the only one with zero heap allocations:
+  v1 to v5 still reach the general-purpose allocator through
+  `std::unordered_map`'s per-node allocation.
+* **The timed and untimed columns pull apart as the engines get faster.**
+  For naive they match; final runs about three times faster untimed. The
+  timestamps cost about the same per operation in every engine, so the
+  faster the engine, the larger their share.
+
+### Profile-driven attempts, October 2026
+
+Starting from the final engine, the rule was: profile, change one thing,
+and keep it only if it measures faster. `scripts/profile.py` sampled the untimed pass of
+the final engine (`results/profiles/`). After the op-kind switch, which
+mispredicts because the workload mixes operation types at random, the hot
+lines were id-map probes and the order-line loads in `match` and `rest`.
+Two changes came from that profile:
+
+* **Single-probe cancel.** Cancel found an order, then `erase()` hashed the
+  id and walked the same probe chain again. `take()` does both in one walk.
+* **Fibonacci hashing.** Every probe starts with the hash, and
+  backward-shift deletion re-hashes each neighbor it inspects. The splitmix64
+  finalizer is two multiplies and three shift-xors in a dependent chain;
+  Fibonacci hashing is one multiply and a shift.
+
+Each batch runs the unchanged baseline build and the changed build
+interleaved, five runs each. A batch is valid only if its unchanged build ran
+within 10% of the baseline batch's median (`results/baseline/`, 50.0M ops/s).
+That check reads only the unchanged build, so it cannot favor a change.
+Invalid batches stay in the table.
+
+<!-- BEGIN generated: attempts baseline noise-check try-cancel-take try-cancel-take-rerun try-cancel-take-run3 try-fibonacci-hash try-fibonacci-hash-rerun try-fibonacci-hash-run3 -->
+| batch | change | before, Mops/s | after, Mops/s | median | load | verdict |
+|---|---|---|---|---|---|---|
+| `noise-check` | The same build as a. | 49.8 (48.6 to 50.2) | 49.6 (46.2 to 49.8) | -0.5% | 4.82 to 4.82 | no clear change, ranges overlap |
+| `try-cancel-take` | cancel takes its id-map entry with one probe walk instead of find and then erase. Another job held three cores; the code was reverted after this batch. | 31.6 (29.9 to 32.5) | 32.8 (31.7 to 33.8) | +3.9% | 9.53 to 9.92 | not valid: before build ran -37% from the baseline |
+| `try-cancel-take-rerun` | cancel takes its id-map entry with one probe walk, second batch. Both builds ran about a third as fast as a minute later. | 13.6 (11.2 to 17.5) | 13.6 (7.7 to 16.4) | -0.0% | 4.25 to 4.39 | not valid: before build ran -73% from the baseline |
+| `try-cancel-take-run3` | cancel takes its id-map entry with one probe walk, third batch. Stays reverted. | 52.3 (47.3 to 53.5) | 52.6 (51.8 to 55.0) | +0.6% | 3.81 to 3.91 | no clear change, ranges overlap |
+| `try-fibonacci-hash` | Fibonacci hashing in the id map. Another job held three cores during the batch. | 29.5 (26.5 to 31.4) | 36.4 (30.6 to 39.0) | +23.3% | 8.70 to 9.02 | not valid: before build ran -41% from the baseline |
+| `try-fibonacci-hash-rerun` | Fibonacci hashing in the id map, second batch. Both builds ran about a third as fast as a minute later. | 18.7 (10.8 to 30.0) | 19.2 (8.9 to 27.5) | +2.6% | 4.25 to 4.68 | not valid: before build ran -62% from the baseline |
+| `try-fibonacci-hash-run3` | Fibonacci hashing in the id map, third batch. Kept. | 49.6 (44.9 to 49.9) | 57.8 (53.7 to 60.8) | +16.5% | 3.91 to 3.91 | faster, ranges do not overlap |
+<!-- END generated -->
+
+Readings:
+
+* **The A/A check holds.** One build against itself differs by 0.5% at the
+  median, with overlapping ranges.
+* **Four of the six attempt batches are not valid.** The first two ran while
+  another job held three cores. The next two ran during a twenty-second
+  slowdown that cut both builds to about a third of their speed; a minute
+  later the machine was back to normal. The plan before those batches was
+  "re-run once"; the validity check was added after they came back
+  unusable, and it reads only the unchanged build.
+* **Fibonacci hashing is kept.** In its first valid batch every changed run
+  beat every unchanged run: 16.5% more throughput at the median, and mean
+  latency down from 32.5 to 27.7 ns. The measurement does not say which part
+  did it: the shorter hash chain in front of each probe's load, or the more
+  even spacing Fibonacci hashing gives sequential ids, which leaves fewer
+  collisions to walk.
+* **Single-probe cancel stays reverted.** In its valid batch it measured
+  +0.6% at the median, inside the noise. Likely reason: the second walk it
+  removed was already in cache, and the core computes the second hash while
+  the first probe's load is still in flight.
 
 ## Scale, endurance, and the wire
 
-Three more measurements from August 2026, before runs recorded load:
+Measurements beyond the single-engine benchmark. The first three are from
+August 2026, before runs recorded load:
 
 * **Sharding** (`--threads N`: one engine per thread, disjoint instruments,
   no shared state, the way real venues scale): aggregate throughput peaks at
@@ -225,6 +308,14 @@ Three more measurements from August 2026, before runs recorded load:
   the current gateway (with per-connection order ownership), under a load
   average of 8.1: p50 31.5 us, p99 58.4 us, p99.9 90.5 us
   (`results/wire_2026-10-22.txt`).
+* **Gateway under load** (`scripts/gateway_load.sh`, October 2026, in a Linux
+  VM on this machine, median of 5 runs per client count): 1, 8, 32, and 128
+  closed-loop clients on persistent connections. Throughput levels off near
+  50k orders/s from 8 clients up while round trips grow with the client
+  count (p50 2.3 ms at 128 clients), so the single-threaded poll() gateway,
+  not the engine, is the limit. After every run the clients disconnect with
+  orders resting, and the gateway must cancel all of them: zero were left in
+  all 20 runs (`results/gateway_load.md`).
 
 ## Benchmark methodology
 
@@ -243,6 +334,17 @@ Three more measurements from August 2026, before runs recorded load:
   conditions.
 * Percentiles are exact: every sample is kept and sorted, no histogram
   approximation. Cross-run figures are medians of 5 runs.
+* Two passes per run, on fresh books. The timed pass gives latency; the
+  untimed pass, with no timestamps, gives throughput and must end with the
+  same book. The timestamp reads sit behind an `isb`, which drains the
+  pipeline: in a profile of the timed loop, 61.7% of samples land on those
+  two reads (`results/profiles/`), and the timed pass runs at about half the
+  untimed rate.
+* Comparisons run in one batch with the builds interleaved, A then B, then
+  B then A, so load drift falls on both. A change is called faster or slower
+  only when every run of one build beats every run of the other; otherwise
+  the verdict is "no clear change", whatever the medians say. The A/A check
+  (one build against itself) is the first row of the attempts table.
 * Global `operator new` (aligned overloads included) is interposed and counted
   over the measured region only. The "0.000 allocs/op" cell is measured on
   every run, not asserted once.
@@ -342,7 +444,9 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 
 ./build/lob_tests                      # 420 tests
-./scripts/bench_report.sh build        # the Benchmark table: 5 runs, medians
+./scripts/bench_report.sh mine final=build   # 5 runs saved as results/mine/*.json, medians
+python3 scripts/results.py readme      # regenerate this README's tables from results/
+./scripts/profile.py                   # where the untimed pass spends its time (macOS)
 ./build/bench final                    # one benchmark run of the final engine
 ./build/bench naive                    # the baseline, for contrast
 ./scripts/net_smoke.sh build           # end-to-end network test
@@ -357,7 +461,8 @@ cmake --build build-san --target lob_tests && ./build-san/lob_tests
 (default 1,000,000), `--warmup N` (default 100,000), `--seed S`,
 `--label STR`, `--csv PATH`, `--json PATH` (one file holding the whole run:
 machine, compiler, flags, load, timer resolution, throughput, allocations,
-and percentiles per operation type), `--threads N` (one engine per thread),
+and percentiles per operation type, plus the untimed pass's throughput),
+`--threads N` (one engine per thread),
 `--pool SLOTS` and `--idmap SLOTS` (final engine capacity). Results also
 append as CSV for charting.
 
@@ -369,9 +474,10 @@ engines/            naive_book.hpp (reference) and frozen snapshots book_v1..v5.
 bench/              harness: clock, workload, stats, alloc counter, driver
 net/                protocol.hpp, framing.hpp, gateway, order_client, feed_client
 tests/              GoogleTest suites incl. differential, property, and fuzz tests
-scripts/            bench_report.sh (README benchmark), net_smoke.sh, gateway_load.sh
+scripts/            bench_report.sh and results.py (benchmark runs and README tables),
+                    profile.py, net_smoke.sh, gateway_load.sh
 docs/               perf.md (hardware counter profiling guide)
-results/            benchmark CSVs
+results/            one directory of JSON runs per batch, profiles, older CSVs
 ```
 
 ## Known limitations, stated on purpose

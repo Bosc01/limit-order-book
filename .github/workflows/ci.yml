@@ -26,6 +26,8 @@ jobs:
           grep -q "heap allocations in measured region: 0 " /tmp/bench.out
       - name: Network smoke test
         run: ./scripts/net_smoke.sh build
+      - name: README tables match the saved runs
+        run: python3 scripts/results.py readme --check
 
   ubsan:
     runs-on: ubuntu-latest

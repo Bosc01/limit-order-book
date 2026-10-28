@@ -41,6 +41,18 @@ No `perf` here, and VMs on Apple Silicon cannot see the PMU either. In order
 of usefulness:
 
 ```bash
+# what this repo's optimization attempts were chosen from: 50 runs of the
+# README configuration under the built-in `sample` profiler, flattened to
+# self samples per source line (needs only the Command Line Tools)
+./scripts/profile.py                         # untimed (throughput) pass
+./scripts/profile.py --frame run_ops_gated   # timed (latency) pass
+```
+
+Inlined engine code is attributed to the harness line that called it, and
+an `isb` collects the stall time of the instructions before it, which is why
+the timed pass's profile is dominated by its timestamp reads.
+
+```bash
 # Instruments counter template (requires full Xcode, not just CLT):
 xcrun xctrace record --template 'CPU Counters' \
   --launch -- ./build/bench final --ops 1000000

@@ -65,7 +65,7 @@ def load(batch):
 
 
 def mops(x):
-    return f"{x / 1e6:.1f}"
+    return f"{x / 1e6:.2f}" if x < 1e6 else f"{x / 1e6:.1f}"
 
 
 def med_range(xs):
@@ -196,6 +196,11 @@ def attempts(baseline_batch, *batches):
     return "\n".join(lines) + "\n"
 
 
+def against(prev, e):
+    clear = not verdict(prev, e).startswith("no clear")
+    return f"{delta(prev, e):+.0f}%" + ("" if clear else ", ranges overlap")
+
+
 def progression(batch):
     entries = load(batch)
     lines = [
@@ -208,7 +213,7 @@ def progression(batch):
         allocs = statistics.median(e.values("heap_allocations")) / e.runs[0]["measured_ops"]
         lines.append(
             f"| {e.name} | {e.note} | {med_range(e.values(UNTIMED))} | "
-            f"{'' if prev is None else f'{delta(prev, e):+.0f}%'} | "
+            f"{'' if prev is None else against(prev, e)} | "
             f"{mops(statistics.median(e.values(TIMED)))} | {e.lat('all', 'mean_ns'):.1f} | "
             f"{e.lat('all', 'p50_ns'):.0f} | {e.lat('all', 'p90_ns'):.0f} | "
             f"{e.lat('all', 'p99_ns'):.0f} | {e.lat('all', 'p999_ns'):.0f} | {allocs:.3f} |")
