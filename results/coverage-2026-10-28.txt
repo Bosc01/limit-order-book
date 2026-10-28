@@ -1,0 +1,26 @@
+llvm-cov source-based coverage of lob_tests
+recorded: 2026-10-28T19:43:45Z
+commit: 362cd5d (source files identical to this commit)
+compiler: Homebrew clang version 22.1.8
+build: cmake -B build-cov -DCMAKE_BUILD_TYPE=Debug -DLOB_COVERAGE=ON -DCMAKE_CXX_COMPILER=/opt/homebrew/opt/llvm/bin/clang++
+run: LLVM_PROFILE_FILE=cov.profraw ./lob_tests   (425 tests, all passed)
+report: llvm-cov report ./lob_tests -instr-profile=cov.profdata -ignore-filename-regex='(tests|_deps|googletest|bench)/'
+net/gateway.cpp (the socket loop) is not linked into lob_tests, so it is not in this report.
+
+Filename                       Regions    Missed Regions     Cover   Functions  Missed Functions  Executed       Lines      Missed Lines     Cover    Branches   Missed Branches     Cover
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+engines/book_v1.hpp                227                17    92.51%          24                 0   100.00%         220                 2    99.09%         156                23    85.26%
+engines/book_v2.hpp                225                17    92.44%          23                 0   100.00%         209                 2    99.04%         152                23    84.87%
+engines/book_v3.hpp                225                17    92.44%          23                 0   100.00%         216                 2    99.07%         152                23    84.87%
+engines/book_v4.hpp                231                23    90.04%          23                 0   100.00%         231                 8    96.54%         154                29    81.17%
+engines/book_v5.hpp                274                23    91.61%          35                 0   100.00%         282                10    96.45%         173                30    82.66%
+engines/naive_book.hpp             158                 5    96.84%          27                 0   100.00%         157                 1    99.36%         116                 7    93.97%
+include/lob/id_map.hpp              48                 3    93.75%           9                 0   100.00%          66                 1    98.48%          35                 6    82.86%
+include/lob/order_book.hpp         303                20    93.40%          39                 0   100.00%         318                 4    98.74%         187                25    86.63%
+include/lob/pool.hpp                14                 0   100.00%           8                 0   100.00%          35                 0   100.00%           6                 0   100.00%
+include/lob/types.hpp                2                 2     0.00%           2                 2     0.00%           2                 2     0.00%           0                 0         -
+net/framing.hpp                     26                 3    88.46%           2                 0   100.00%          32                 3    90.62%          18                 4    77.78%
+net/gateway.hpp                    145                12    91.72%          20                 1    95.00%         184                21    88.59%         104                18    82.69%
+net/protocol.hpp                   138                11    92.03%          41                 0   100.00%         207                 0   100.00%          76                24    68.42%
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+TOTAL                             2016               153    92.41%         276                 3    98.91%        2159                56    97.41%        1329               212    84.05%

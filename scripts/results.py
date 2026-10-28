@@ -14,6 +14,7 @@ Every number between "BEGIN generated" and "END generated" in those files
 comes from these files.
 """
 import json
+import math
 import pathlib
 import re
 import statistics
@@ -65,8 +66,19 @@ def load(batch):
     return entries
 
 
+# Figures are truncated toward zero, never rounded away from it, so a table
+# cannot overstate a throughput or a difference.
+def down(x, places):
+    nudge = 1e-9 if x >= 0 else -1e-9
+    return f"{math.trunc(x * 10 ** places + nudge) / 10 ** places:.{places}f}"
+
+
+def signed(x, places):
+    return ("-" if x < 0 else "+") + down(abs(x), places)
+
+
 def mops(x):
-    return f"{x / 1e6:.2f}" if x < 1e6 else f"{x / 1e6:.1f}"
+    return down(x / 1e6, 2 if x < 1e6 else 1)
 
 
 def med_range(xs):
@@ -103,6 +115,8 @@ def validity(baseline, base):
 
 def loads(entries):
     xs = [r["machine"]["load_average"][0] for e in entries for r in e.runs]
+    if min(xs) == max(xs):
+        return f"{xs[0]:.2f}"
     return f"{min(xs):.2f} to {max(xs):.2f}"
 
 
@@ -136,14 +150,16 @@ def headline(batch, name):
     return "\n".join([
         "| metric | value |",
         "|---|---|",
-        f"| throughput | {mops(statistics.median(e.values(UNTIMED)))}M ops/s |",
-        f"| throughput with a timestamp around every op | "
+        f"| throughput, no per-operation timestamps | "
+        f"{mops(statistics.median(e.values(UNTIMED)))}M ops/s |",
+        f"| throughput, counter read around every operation | "
         f"{mops(statistics.median(e.values(TIMED)))}M ops/s |",
         f"| mean latency | {e.lat('all', 'mean_ns'):.1f} ns |",
         f"| p50 / p99 / p99.9 | {e.lat('all', 'p50_ns'):.0f} / {e.lat('all', 'p99_ns'):.0f}"
         f" / {e.lat('all', 'p999_ns'):.0f} ns |",
         f"| heap allocations in the measured region | zero in {e.allocs_zero()} of "
         f"{len(e.runs)} runs |",
+        f"| 1-minute load average when the runs started | {loads([e])} |",
     ]) + "\n"
 
 
@@ -191,7 +207,7 @@ def attempts(baseline_batch, *batches):
         bad = validity(baseline, base)
         lines.append(
             f"| `{batch}` | {cand.note} | {med_range(base.values(UNTIMED))} | "
-            f"{med_range(cand.values(UNTIMED))} | {delta(base, cand):+.1f}% | "
+            f"{med_range(cand.values(UNTIMED))} | {signed(delta(base, cand), 1)}% | "
             f"{loads(entries)} | "
             f"{f'not valid: before build ran {bad}' if bad else verdict(base, cand)} |")
     return "\n".join(lines) + "\n"
@@ -199,7 +215,7 @@ def attempts(baseline_batch, *batches):
 
 def against(prev, e):
     clear = not verdict(prev, e).startswith("no clear")
-    return f"{delta(prev, e):+.0f}%" + ("" if clear else ", ranges overlap")
+    return f"{signed(delta(prev, e), 1)}%" + ("" if clear else ", ranges overlap")
 
 
 def progression(batch):
@@ -217,7 +233,7 @@ def progression(batch):
             f"{'' if prev is None else against(prev, e)} | "
             f"{mops(statistics.median(e.values(TIMED)))} | {e.lat('all', 'mean_ns'):.1f} | "
             f"{e.lat('all', 'p50_ns'):.0f} | {e.lat('all', 'p90_ns'):.0f} | "
-            f"{e.lat('all', 'p99_ns'):.0f} | {e.lat('all', 'p999_ns'):.0f} | {allocs:.3f} |")
+            f"{e.lat('all', 'p99_ns'):.0f} | {e.lat('all', 'p999_ns'):.0f} | {math.ceil(allocs * 1000 - 1e-9) / 1000:.3f} |")
         prev = e
     return "\n".join(lines) + "\n"
 

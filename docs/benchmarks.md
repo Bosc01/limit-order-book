@@ -44,7 +44,7 @@ with an RStudio session, which otherwise held one core at 100%, paused
 (SIGSTOP) for their duration. The Bluetooth daemon still held one core near
 100%. Under those conditions one build run against itself
 (`results/noise-check-2026-10-28/`) differed by 0.1% at the median, and each
-build's five runs spanned about 1.6%.
+build's five runs spanned 1.5% and 1.7%.
 
 Batches dated 2026-10-27, which include every attempt batch below, ran on
 battery with both processes busy, per the power line each run logs in its
@@ -71,7 +71,7 @@ timer resolution: 41.7 ns
 | cancel | 24.1 | 41 | 42 | 84 |
 | modify | 30.1 | 41 | 84 | 125 |
 
-Throughput, untimed pass: median 67.6M ops/s, runs from 66.3M to 68.0M. With a timestamp around every op: median 29.4M, runs from 28.6M to 29.6M. Load average at the start of each run: 4.81 to 4.81. Every run is in `results/final-2026-10-28/`, built from commit `78d4f36`.
+Throughput, untimed pass: median 67.6M ops/s, runs from 66.2M to 68.0M. With a timestamp around every op: median 29.3M, runs from 28.5M to 29.6M. Load average at the start of each run: 4.81. Every run is in `results/final-2026-10-28/`, built from commit `78d4f36`.
 <!-- END generated -->
 
 In a profile of the timed pass, 61.7% of samples land on the two counter
@@ -99,20 +99,20 @@ profile:
 
 Each batch runs the unchanged build and the changed build interleaved, five
 runs each. A batch is valid only if its unchanged build ran within 10% of
-the baseline batch's median (`results/baseline/`, 50.0M ops/s). The check
+the baseline batch's median (`results/baseline/`, 49.9M ops/s). The check
 reads only the unchanged build, so it cannot favor a change. Invalid batches
 stay in the table.
 
 <!-- BEGIN generated: attempts baseline noise-check try-cancel-take try-cancel-take-rerun try-cancel-take-run3 try-fibonacci-hash try-fibonacci-hash-rerun try-fibonacci-hash-run3 -->
 | batch | change | before, Mops/s | after, Mops/s | median | load | verdict |
 |---|---|---|---|---|---|---|
-| `noise-check` | The same build as a. | 49.8 (48.6 to 50.2) | 49.6 (46.2 to 49.8) | -0.5% | 4.82 to 4.82 | no clear change, ranges overlap |
-| `try-cancel-take` | cancel takes its id-map entry with one probe walk instead of find and then erase. Another job held three cores; the code was reverted after this batch. | 31.6 (29.9 to 32.5) | 32.8 (31.7 to 33.8) | +3.9% | 9.53 to 9.92 | not valid: before build ran -37% from the baseline |
-| `try-cancel-take-rerun` | cancel takes its id-map entry with one probe walk, second batch. Both builds ran about a third as fast as a minute later. | 13.6 (11.2 to 17.5) | 13.6 (7.7 to 16.4) | -0.0% | 4.25 to 4.39 | not valid: before build ran -73% from the baseline |
-| `try-cancel-take-run3` | cancel takes its id-map entry with one probe walk, third batch. Stays reverted. | 52.3 (47.3 to 53.5) | 52.6 (51.8 to 55.0) | +0.6% | 3.81 to 3.91 | no clear change, ranges overlap |
-| `try-fibonacci-hash` | Fibonacci hashing in the id map. Another job held three cores during the batch. | 29.5 (26.5 to 31.4) | 36.4 (30.6 to 39.0) | +23.3% | 8.70 to 9.02 | not valid: before build ran -41% from the baseline |
-| `try-fibonacci-hash-rerun` | Fibonacci hashing in the id map, second batch. Both builds ran about a third as fast as a minute later. | 18.7 (10.8 to 30.0) | 19.2 (8.9 to 27.5) | +2.6% | 4.25 to 4.68 | not valid: before build ran -62% from the baseline |
-| `try-fibonacci-hash-run3` | Fibonacci hashing in the id map, third batch. Kept. | 49.6 (44.9 to 49.9) | 57.8 (53.7 to 60.8) | +16.5% | 3.91 to 3.91 | faster, ranges do not overlap |
+| `noise-check` | The same build as a. | 49.8 (48.5 to 50.1) | 49.5 (46.2 to 49.8) | -0.5% | 4.82 | no clear change, ranges overlap |
+| `try-cancel-take` | cancel takes its id-map entry with one probe walk instead of find and then erase. Another job held three cores; the code was reverted after this batch. | 31.6 (29.8 to 32.4) | 32.8 (31.7 to 33.7) | +3.9% | 9.53 to 9.92 | not valid: before build ran -37% from the baseline |
+| `try-cancel-take-rerun` | cancel takes its id-map entry with one probe walk, second batch. Both builds ran about a third as fast as a minute later. | 13.5 (11.1 to 17.5) | 13.5 (7.6 to 16.4) | -0.0% | 4.25 to 4.39 | not valid: before build ran -73% from the baseline |
+| `try-cancel-take-run3` | cancel takes its id-map entry with one probe walk, third batch. Stays reverted. | 52.2 (47.3 to 53.5) | 52.5 (51.8 to 54.9) | +0.5% | 3.81 to 3.91 | no clear change, ranges overlap |
+| `try-fibonacci-hash` | Fibonacci hashing in the id map. Another job held three cores during the batch. | 29.5 (26.4 to 31.4) | 36.3 (30.6 to 39.0) | +23.3% | 8.70 to 9.02 | not valid: before build ran -41% from the baseline |
+| `try-fibonacci-hash-rerun` | Fibonacci hashing in the id map, second batch. Both builds ran about a third as fast as a minute later. | 18.7 (10.8 to 30.0) | 19.2 (8.8 to 27.4) | +2.5% | 4.25 to 4.68 | not valid: before build ran -62% from the baseline |
+| `try-fibonacci-hash-run3` | Fibonacci hashing in the id map, third batch. Kept. | 49.6 (44.9 to 49.8) | 57.8 (53.6 to 60.7) | +16.5% | 3.91 | faster, ranges do not overlap |
 <!-- END generated -->
 
 * The A/A batch, one build against itself, differs by 0.5% at the median
@@ -124,8 +124,8 @@ stay in the table.
 * Fibonacci hashing is kept. In its valid batch every changed run beat every
   unchanged run: +16.5% at the median, and mean latency from 32.5 to 27.7 ns.
   The same pair of commits re-run on 2026-10-28 under the quieter conditions
-  (`results/try-fibonacci-hash-2026-10-28/`) gave 55.4M to 67.8M ops/s,
-  +22.6%, again with every changed run faster, and mean latency from 27.5 to
+  (`results/try-fibonacci-hash-2026-10-28/`) gave 55.3M to 67.8M ops/s,
+  +22.5%, again with every changed run faster, and mean latency from 27.5 to
   23.9 ns. Neither batch separates the two candidate causes: the shorter
   dependency chain in front of each probe's load, or fewer collisions from
   the more even spacing it gives sequential ids.

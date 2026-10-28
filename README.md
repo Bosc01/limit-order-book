@@ -5,8 +5,9 @@
 A price-time priority matching engine for one instrument, in C++20, with a
 TCP order gateway and a UDP market data feed. I wrote it to learn how
 exchange matching engines are built. Each optimization is kept as its own
-engine in `engines/`, and all seven replay the same workload, so every step
-is measured against the one before it.
+engine in `engines/`: seven engines, so six steps, each measured against the
+one before it on the same workload. Two of the six steps, v3 and v4,
+measured no change.
 
 Final engine (`include/lob/`) on an Apple M5, one thread, median of five runs
 of 2M operations (seed 42: 45% passive limit, 10% crossing limit, 5% market,
@@ -15,18 +16,21 @@ of 2M operations (seed 42: 45% passive limit, 10% crossing limit, 5% market,
 <!-- BEGIN generated: headline final-2026-10-28 final -->
 | metric | value |
 |---|---|
-| throughput | 67.6M ops/s |
-| throughput with a timestamp around every op | 29.4M ops/s |
+| throughput, no per-operation timestamps | 67.6M ops/s |
+| throughput, counter read around every operation | 29.3M ops/s |
 | mean latency | 24.9 ns |
 | p50 / p99 / p99.9 | 41 / 83 / 125 ns |
 | heap allocations in the measured region | zero in 5 of 5 runs |
+| 1-minute load average when the runs started | 4.81 |
 <!-- END generated -->
 
 Throughput comes from a pass with no timestamps. Latency comes from a second
 pass over the same operations that reads the system counter around each one.
 Each read sits behind an `isb`, which serializes the pipeline, so that pass
 runs at less than half the rate. The p50 is one step of the counter, which
-advances every 41.7 ns. Method, machine conditions, and every run:
+advances every 41.7 ns. The August 2026 figure of 26.9M ops/s, quoted
+as 27M (`results/final_2m.csv`), had only the timed pass, so it compares
+with the timed row, not the first. Method, machine conditions, and every run:
 [docs/benchmarks.md](docs/benchmarks.md).
 
 ## Design
@@ -133,23 +137,23 @@ warmup, fewer than the headline because `naive` slows as its book grows
 <!-- BEGIN generated: progression progression-2026-10-28 -->
 | engine | change | untimed Mops/s | against previous | timed Mops/s | mean ns | p50 | p90 | p99 | p99.9 | allocs per op |
 |---|---|---|---|---|---|---|---|---|---|---|
-| naive | std::map + std::list, O(n) cancel | 0.15 (0.15 to 0.15) |  | 0.15 | 6571.7 | 42 | 22643 | 48577 | 60201 | 0.401 |
-| v1 | map ladder, intrusive list, hash index | 25.6 (25.4 to 25.7) | +16888% | 17.2 | 49.0 | 42 | 84 | 125 | 208 | 0.796 |
-| v2 | + slab pool for orders | 32.2 (31.8 to 32.6) | +26% | 20.1 | 40.7 | 42 | 83 | 125 | 167 | 0.401 |
-| v3 | + Order aligned to 64 bytes | 32.2 (31.7 to 32.4) | -0%, ranges overlap | 20.2 | 40.5 | 42 | 83 | 125 | 167 | 0.401 |
-| v4 | + branch layout in the match loop | 32.8 (32.2 to 33.1) | +2%, ranges overlap | 20.1 | 40.5 | 42 | 83 | 125 | 167 | 0.401 |
-| v5 | + flat banded ladder with bitmap | 37.3 (36.7 to 37.6) | +13% | 22.0 | 36.4 | 42 | 42 | 84 | 167 | 0.395 |
-| final | + open-addressing id map, Fibonacci hash | 78.2 (77.2 to 79.0) | +110% | 30.7 | 23.6 | 41 | 42 | 83 | 125 | 0.000 |
+| naive | std::map + std::list, O(n) cancel | 0.15 (0.14 to 0.15) |  | 0.15 | 6571.7 | 42 | 22643 | 48577 | 60201 | 0.402 |
+| v1 | map ladder, intrusive list, hash index | 25.5 (25.4 to 25.7) | +16888.2% | 17.2 | 49.0 | 42 | 84 | 125 | 208 | 0.797 |
+| v2 | + slab pool for orders | 32.2 (31.8 to 32.6) | +25.9% | 20.1 | 40.7 | 42 | 83 | 125 | 167 | 0.402 |
+| v3 | + Order aligned to 64 bytes | 32.1 (31.6 to 32.4) | -0.0%, ranges overlap | 20.1 | 40.5 | 42 | 83 | 125 | 167 | 0.402 |
+| v4 | + branch layout in the match loop | 32.8 (32.2 to 33.1) | +2.0%, ranges overlap | 20.1 | 40.5 | 42 | 83 | 125 | 167 | 0.402 |
+| v5 | + flat banded ladder with bitmap | 37.2 (36.7 to 37.6) | +13.4% | 22.0 | 36.4 | 42 | 42 | 84 | 167 | 0.396 |
+| final | + open-addressing id map, Fibonacci hash | 78.2 (77.1 to 78.9) | +110.0% | 30.6 | 23.6 | 41 | 42 | 83 | 125 | 0.000 |
 <!-- END generated -->
 
 A step is called faster only when every one of its runs beats every run of
 the previous engine; "ranges overlap" marks the others.
 
-* v1: in `naive`, cancel and modify average 16 and 18 us because they search
-  the book. The id index brings them to 32 and 42 ns.
+* v1: in `naive`, cancel and modify average 15.5 and 18.4 us because they
+  search the book. The id index brings them to 32.2 and 42.1 ns.
 * v2: the pool beat v1 in every run.
-* v3 (64-byte aligned `Order`) and v4 (branch layout in the match loop): no
-  measurable change, most likely because the working set fits in cache and
+* v3 (64-byte aligned `Order`) and v4 (branch layout in the match loop): both
+  measured no change, most likely because the working set fits in cache and
   the branches are well predicted. Both are kept because they cost nothing.
 * v5: the flat ladder beat v4 in every run, 13% at the median.
 * final: the open-addressing id map more than doubles v5 (+110%) and
@@ -161,8 +165,11 @@ the previous engine; "ranges overlap" marks the others.
 
 ## Verification
 
-425 GoogleTest cases; 98.2% line and 99.2% function coverage over the
-engines and the wire protocol (llvm-cov).
+425 GoogleTest cases, the suite CI runs on Linux, on macOS, and under UBSan.
+llvm-cov measures 97.4% line and 98.9% function coverage over the engines,
+the wire protocol, and the gateway's order handling
+(`results/coverage-2026-10-28.txt`). The socket loop in `net/gateway.cpp` is
+not in the test binary; `scripts/net_smoke.sh` exercises it, unmeasured.
 
 * One typed suite runs against all seven engines. `naive` is the
   specification: every engine must return the same results and print the
