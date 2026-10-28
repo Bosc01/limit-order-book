@@ -1,9 +1,9 @@
 // Differential testing: replay the exact benchmark workload through the
 // naive reference and the engine under test, comparing EVERY op result and
 // the full trade tape, with periodic structural audits and a final
-// level-by-level book comparison. This is the strongest correctness tool in
-// the project: any semantic drift an optimization introduces shows up as a
-// divergence within a few thousand ops, pinned to the exact op index.
+// level-by-level book comparison. A divergence is reported at the exact op
+// index. The workload never uses STP, id 0, or band edges; the typed and
+// property suites cover those.
 #include <gtest/gtest.h>
 
 #include <cstdint>

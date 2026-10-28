@@ -8,34 +8,20 @@
 
 namespace lob::v5 {
 
-// Engine v5 = v4 + flat banded price ladder. ONE measured change.
+// Engine v5 = v4 + flat banded price ladder. One change.
 //
-// std::map is a red-black tree: every level touch chases 3-5 scattered heap
-// nodes, inserting rebalances, erasing a level costs O(log L) more pointer
-// writes. But prices are small integers on a tick grid, and an instrument
-// trades inside a bounded band (real venues enforce this: price bands,
-// limit-up/limit-down). So the ladder becomes:
+// Prices are integer ticks inside a bounded band, so each side becomes a
+// flat array of Levels indexed by (price - band_lo), a bitmap with one bit
+// per tick, and a cached best price. Creating or erasing a level, an
+// O(log L) node allocation or free in the std::map ladder, is now setting
+// or clearing a bit. When the best level empties, the next is found by a
+// masked scan with clz or ctz, 64 ticks per word; that rescan is the new
+// tail-latency source.
 //
-//   * one flat array of Levels per side, indexed by (price - band_lo):
-//     level lookup is one add and one line load, O(1), no rebalancing ever;
-//   * a bitmap (one bit per price) with one word covering 64 ticks, so
-//     "where is the next non-empty level" is a masked word scan plus a
-//     count-leading/trailing-zeros instruction;
-//   * a cached best price per side: O(1) reads, updated on the spot when a
-//     better order arrives, re-scanned via the bitmap only when the best
-//     level empties.
+// Prices outside [band_lo, band_hi) are rejected. The band is a constructor
+// parameter and is never recentered.
 //
-// The cost, stated honestly: prices outside [band_lo, band_hi) are REJECTED.
-// A production engine centers the band on the previous close and recenters
-// on a halt; this one takes the band as constructor parameters. The scan
-// after the best level empties is also the new tail-latency source -- see
-// the benchmark discussion.
-//
-// Levels are never allocated or freed after construction: an empty level is
-// just a slot with head == nullptr and a cleared bit. Erase-level, the
-// O(log L) map operation, is now "clear one bit".
-//
-// Still untouched: unordered_map id index (v6).
+// Still untouched: unordered_map id index (final).
 template <class Listener = NullListener>
 class BookT {
 public:
@@ -147,10 +133,9 @@ private:
         Level*  level;
         Side    side;
     };
-    static_assert(sizeof(Order) == 64, "Order must fill exactly one cache line");
+    static_assert(sizeof(Order) == 64, "Order must be one 64-byte slot");
 
-    // One line per level too: a level touch (append, fill, deplete) stays
-    // within a single line, and neighboring levels never false-share it.
+    // 40 bytes of fields padded to 64, so no level straddles a line.
     struct alignas(64) Level {
         Order*        head = nullptr;
         Order*        tail = nullptr;

@@ -8,17 +8,15 @@
 
 namespace lob::v2 {
 
-// Engine v2 = v1 + memory pool for orders. ONE measured change.
+// Engine v2 = v1 + slab pool for orders. One change.
 //
-// v1 paid a heap new on every resting order and a delete on every fill-out,
-// cancel, and reprice. Those hit the general-purpose allocator: size-class
-// bookkeeping, occasional madvise/mmap, and allocation addresses scattered
-// across the heap (so a level walk pointer-chases cold lines). The pool
-// replaces that with pop/push on a free list inside pre-reserved slabs.
+// v1 called new on every resting order and delete on every fill, cancel, and
+// reprice. The pool replaces both with a free-list pop and push inside
+// pre-faulted slabs, and orders created close in time sit close in memory.
 //
-// Still untouched: struct layout (v3), branch structure (v4), std::map
-// ladder (v5), unordered_map id index -- which still allocates a node per
-// insert (v6).
+// Still untouched: Order layout (v3), branch structure (v4), std::map ladder
+// (v5), and the unordered_map id index, which still allocates a node per
+// insert (final).
 template <class Listener = NullListener>
 class BookT {
 public:

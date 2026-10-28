@@ -7,22 +7,16 @@
 
 namespace lob::v1 {
 
-// Engine v1 -- the target architecture, correct-first, not yet fast.
+// Engine v1: the final engine's structure without its optimizations.
 //
-// Three layered structures:
-//   1. Price ladder: std::map per side (bids sorted descending, asks
-//      ascending) so begin() is always the best price. O(log L) inserts,
-//      O(1) best access. Replaced by a flat array in v5.
-//   2. Orders within a level: intrusive doubly-linked FIFO. Head = oldest =
-//      first to fill (time priority). Intrusive means the links live INSIDE
-//      the Order, so there is no separate list-node allocation and an
-//      Order* is enough to unlink in O(1).
-//   3. Id index: unordered_map<OrderId, Order*> making cancel/modify O(1)
-//      lookups instead of the naive full-book scan.
+//   * price ladder: std::map per side with the best price at begin(); a new
+//     level is an O(log L) insert (flat array in v5)
+//   * queue at a price: intrusive doubly linked FIFO, head fills first
+//   * id index: unordered_map<OrderId, Order*>, so cancel and modify no
+//     longer search the book
 //
-// Still deliberately unoptimized: every order is a heap new/delete (pool
-// arrives in v2), struct layout is untuned (v3), the match loop branches on
-// side via templates but the ladder walk still chases map nodes (v5).
+// Every order is a heap new and delete (pool in v2), and the Order layout is
+// untuned (v3).
 template <class Listener = NullListener>
 class BookT {
 public:

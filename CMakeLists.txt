@@ -9,9 +9,9 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
-# This machine's CommandLineTools install is missing the toolchain copy of
-# the libc++ headers, and clang does not fall back to the SDK's copy on its
-# own. Add the SDK copy only when the toolchain copy is absent.
+# Some CommandLineTools installs lack the toolchain copy of the libc++
+# headers, and AppleClang does not fall back to the SDK's copy. Add the SDK
+# copy only when the toolchain copy is absent.
 if(APPLE AND CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang"
    AND NOT EXISTS "/Library/Developer/CommandLineTools/usr/include/c++/v1/cstdint")
   execute_process(COMMAND xcrun --show-sdk-path
@@ -20,19 +20,11 @@ if(APPLE AND CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang"
   include_directories(SYSTEM "${LOB_SDKROOT}/usr/include/c++/v1")
 endif()
 
-# Hot-path flag rationale:
-#   -O3             aggressive inlining: the hot path is many tiny functions
-#                   that must collapse into one straight-line matching loop.
-#   -fno-exceptions no unwind tables, and the compiler stops treating every
-#                   call as "may throw", which frees it to keep state in
-#                   registers across calls. Hot-path errors are return codes.
-#   -fno-rtti       no typeinfo; documents that nothing on the hot path is
-#                   virtual (engines use templates, not interfaces).
-set(LOB_HOT_FLAGS -O3 -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic)
+# Optimization comes from the build type (Release: -O3 -DNDEBUG). Nothing
+# outside the tests throws or uses RTTI; errors are return codes.
+set(LOB_HOT_FLAGS -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic)
 
-# Optional sanitizer build: cmake -DLOB_SANITIZE="address,undefined"
-# Applied to TEST targets (sanitizers change codegen too much for benchmark
-# numbers to mean anything).
+# cmake -DLOB_SANITIZE=address,undefined instruments the test binary only.
 set(LOB_SANITIZE "" CACHE STRING "sanitizers for test targets, e.g. address,undefined")
 
 # ---- benchmark ------------------------------------------------------------
@@ -47,10 +39,8 @@ target_compile_definitions(bench PRIVATE
   "LOB_BUILD_FLAGS=\"${LOB_BENCH_FLAGS}\"" "LOB_BUILD_TYPE=\"${CMAKE_BUILD_TYPE}\"")
 
 # ---- tests ----------------------------------------------------------------
-# GoogleTest: use a local checkout in third_party/ when present (offline
-# builds), otherwise fetch the pinned tag. Tests build WITH exceptions
-# (GoogleTest wants them) and at -O1: the engine headers are exception-free
-# either way, and sanitizer/assert quality matters more than speed here.
+# GoogleTest from third_party/ when present, otherwise the pinned tag. Tests
+# build with exceptions, which GoogleTest uses, and at -O1.
 set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
 set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/googletest/CMakeLists.txt")
@@ -63,7 +53,7 @@ else()
   FetchContent_MakeAvailable(googletest)
 endif()
 
-# ---- networking (Phase 4: real, not fast) ---------------------------------
+# ---- networking -----------------------------------------------------------
 add_executable(gateway net/gateway.cpp)
 add_executable(order_client net/order_client.cpp)
 add_executable(feed_client net/feed_client.cpp)

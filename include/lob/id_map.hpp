@@ -8,28 +8,13 @@
 
 namespace lob {
 
-// Open-addressing hash map from OrderId to a small value (an Order*).
-//
-// Why not std::unordered_map? Chaining: every insert heap-allocates a node,
-// every lookup chases at least one out-of-line pointer, and erase frees to
-// the general allocator. That is one allocation per resting order -- on the
-// hottest path in the engine -- plus a cache miss per cancel.
-//
-// This map is a single flat array of {key, value} slots. Linear probing:
-// a lookup lands on the hashed slot and walks forward; with a load factor
-// capped at 0.5 the expected probe length is ~1.5 slots, which is usually
-// the SAME cache line it already loaded. No allocation ever happens at
-// steady state (the table is pre-sized; growth doubles and rehashes, an
-// amortized event the benchmark proves never fires when sized right).
-//
-// Deletion uses backward-shift (Robin-Hood-style compaction) instead of
-// tombstones: on erase, subsequent probe-chain members that would become
-// unreachable are shifted back into the hole. Tombstones would make probe
-// chains grow monotonically under the book's cancel-heavy churn; backward
-// shift keeps lookups at their theoretical cost forever.
-//
-// Key 0 marks an empty slot, so OrderId 0 is reserved -- the engine rejects
-// it at the door (real venues also reserve sentinel ids).
+// Open-addressing map from OrderId to a small value, in one flat array of
+// {key, value} slots. Linear probing over a power-of-two table with the load
+// factor held at or below 0.5: 1.5 expected probes per hit, 2.5 per miss.
+// Erase shifts later members of the probe run back into the hole instead of
+// leaving a tombstone, so runs do not lengthen under cancel churn. Growth
+// doubles and rehashes, and is counted; a table sized for the session never
+// grows. Key 0 marks an empty slot.
 template <class V>
 class IdMap {
 public:
@@ -69,10 +54,9 @@ public:
             if (slots_[i].key == 0) return false;
             i = (i + 1) & mask_;
         }
-        // Backward shift: walk the rest of the probe cluster; any element
-        // whose ideal slot lies cyclically at-or-before the hole would
-        // become unreachable, so it moves into the hole and leaves a new
-        // hole where it was.
+        // Backward shift: a later member of the run whose home is at or
+        // before the hole (cyclically) moves into it, and its old slot
+        // becomes the hole.
         std::size_t hole = i;
         std::size_t j    = i;
         while (true) {
@@ -99,13 +83,10 @@ private:
         V       val{};
     };
 
-    // Home slot of a key, by Fibonacci hashing: multiply by 2^64 divided by
-    // the golden ratio and keep the top log2(slots) bits. One multiply, and
-    // it still scatters SEQUENTIAL ids (which is what gateways generate):
-    // any run of consecutive ids splits the table into gaps of at most three
-    // sizes, and the golden ratio keeps those sizes as close to equal as any
-    // multiplier can (the three-gap theorem). Identity hashing sequential
-    // keys would fill the table in runs and make probe clusters explode.
+    // Fibonacci hashing: multiply by 2^64/phi and keep the top log2(slots)
+    // bits. Consecutive ids, which is what a gateway issues, land in evenly
+    // spread slots (Knuth, TAOCP 6.4); identity hashing would fill the table
+    // in runs.
     std::size_t home(OrderId k) const {
         return static_cast<std::size_t>((k * 0x9E3779B97F4A7C15ull) >> shift_);
     }

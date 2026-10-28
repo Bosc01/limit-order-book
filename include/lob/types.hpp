@@ -3,19 +3,14 @@
 
 namespace lob {
 
-// Prices are integer ticks, never floating point. FP prices are a classic
-// trap: 0.1 + 0.2 != 0.3, and price comparison must be exact for
-// matching to be deterministic. The tick size lives at the edge (feed/gateway),
-// not in the engine.
+// Prices are integer ticks; the tick size belongs to the gateway.
 using Price   = std::int64_t;
 using Qty     = std::uint32_t;
 using OrderId = std::uint64_t;
-// Participant id for self-trade prevention. Owner 0 is reserved as "no
-// owner": orders with owner 0 are EXEMPT from STP, matching venue practice
-// (CME SMP / Nasdaq AIQ apply prevention only between orders that share an
-// explicitly assigned group; ungrouped flow is exempt). Without this
-// reservation, two unrelated flows that both default the owner would
-// silently self-match-prevent each other.
+// Self-trade prevention group. Owner 0 is ungrouped and exempt from STP,
+// as with CME SMP and Nasdaq AIQ, which apply only within an assigned group.
+// Otherwise two unrelated flows that both default the owner would block
+// each other.
 using Owner   = std::uint32_t;
 
 enum class Side : std::uint8_t { Bid = 0, Ask = 1 };
@@ -26,24 +21,18 @@ enum class Tif : std::uint8_t {
     FOK  // fill the full quantity immediately or do nothing at all
 };
 
-// Self-trade prevention policy. Real venues offer these under various names
-// (CME "self-match prevention", Nasdaq "anti-internalization").
 enum class Stp : std::uint8_t {
     None,          // allow self-trades (default; backtests often want this)
     CancelResting, // incoming order knocks out own resting order, keeps matching
     RejectIncoming // incoming order is rejected the moment it would self-match
 };
 
-// "none" sentinel for best_bid()/best_ask() on an empty side. 0 is safe as a
-// sentinel because valid prices are strictly positive (validated on entry).
+// best_bid()/best_ask() on an empty side. Valid prices are positive.
 inline constexpr Price kNoPrice = 0;
 
-// Known tradeoff, on purpose: three booleans instead of a status enum. Two
-// outcomes look alike from the flags alone -- a GTC order partially filled
-// then STP-stopped ({filled>0, rested=false}) reads like an IOC partial.
-// The gateway's ExecStatus mapping is the disambiguation layer for clients;
-// inside the engine the compact struct keeps every submit path branch-light.
-// A production API would return an explicit outcome enum.
+// filled < requested with rested == false is an IOC or FOK remainder, or,
+// for a GTC order, a RejectIncoming STP stop after partial fills. The caller
+// knows which TIF it sent, so the flags are unambiguous to it.
 struct SubmitResult {
     Qty  filled   = 0;
     bool rested   = false; // remainder is now on the book
@@ -54,24 +43,15 @@ struct ModifyResult {
     bool ok     = false; // order was found and modified
     Qty  filled = 0;     // reprice can cross and fill immediately
     bool rested = false;
-    // Distinguishes "unknown id: the order is gone, stop working it" from
-    // "amend arguments invalid: the order is untouched and still live".
-    // Real venues send different reject reasons for exactly this reason.
-    bool found  = false;
+    bool found  = false; // false: unknown id; true with !ok: bad amend, order live
 };
 
-// Engines take a Listener as a template parameter (static polymorphism):
-// the benchmark instantiates with NullListener and the calls compile to
-// nothing; tests instantiate with a recorder and can assert on the exact
-// trade tape; the gateway instantiates with a publisher. A virtual listener
-// would put an indirect call inside the matching loop.
+// Event sink, passed as a template parameter so the calls inline: this one
+// for the benchmark, a recorder in tests, a publisher in the gateway.
 struct NullListener {
     void on_trade(OrderId /*taker*/, OrderId /*maker*/, Price /*px*/,
                   Qty /*qty*/) {}
-    // Fired when the engine removes a resting order WITHOUT its owner asking
-    // (today: STP CancelResting knocking out the resting order). Without
-    // this event the order would just vanish -- its owner, and any drop-copy
-    // consumer, would still believe it is live.
+    // A resting order removed without its owner asking (STP CancelResting).
     void on_cancel(OrderId /*id*/, Owner /*owner*/) {}
 };
 

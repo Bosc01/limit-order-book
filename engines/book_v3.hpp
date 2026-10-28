@@ -8,26 +8,16 @@
 
 namespace lob::v3 {
 
-// Engine v3 = v2 + cache-conscious Order layout. ONE measured change.
+// Engine v3 = v2 + Order aligned to 64 bytes. One change.
 //
-// Two decisions, both about cache lines (64 bytes on this machine):
-//
-//   1. alignas(64) + padding to exactly one line. Pool slabs are aligned to
-//      alignof(T), so every order occupies exactly one cache line and can
-//      never straddle two. A fill or cancel touches ONE line per order
-//      instead of sometimes two. Cost: 64B instead of 56B per order (+14%
-//      memory) -- cheap insurance.
-//
-//   2. Field order groups by access pattern. The match loop reads/writes
-//      qty, owner, next, id, price on every fill iteration -- they sit in
-//      the first 32 bytes. prev/level/side are only touched on cancel,
-//      modify, or unlink -- they live in the back half. Within one line this
-//      matters less than the alignment, but it keeps the hot half of the
-//      struct dense if the layout is ever packed tighter, and it documents
-//      intent.
+// alignas(64) pads each 56-byte order to a 64-byte slot on a 64-byte
+// boundary (the pool aligns slabs to alignof(T)), so no order straddles a
+// line: an order is one line on x86 and half of a 128-byte line on Apple
+// M-series. The fields the fill loop reads come first. On the M5 this
+// measured no change.
 //
 // Still untouched: branch structure (v4), std::map ladder (v5),
-// unordered_map id index (v6).
+// unordered_map id index (final).
 template <class Listener = NullListener>
 class BookT {
 public:
@@ -136,7 +126,7 @@ private:
         Level*  level;
         Side    side;
     };
-    static_assert(sizeof(Order) == 64, "Order must fill exactly one cache line");
+    static_assert(sizeof(Order) == 64, "Order must be one 64-byte slot");
 
     struct Level {
         Order*        head = nullptr;

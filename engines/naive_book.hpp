@@ -6,25 +6,18 @@
 
 namespace lob {
 
-// Phase-1 baseline and the SEMANTIC REFERENCE for differential testing.
-// DELIBERATELY naive mechanics:
+// The reference engine for differential tests, with slow mechanics on
+// purpose: a std::map of levels, a std::list of orders per level, and cancel
+// and modify by linear search of the whole book.
 //
-//   * std::map price levels        -> red-black tree, pointer-chasing,
-//                                     one heap node per level
-//   * std::list orders per level   -> one heap allocation per resting order,
-//                                     nodes scattered across the heap
-//   * cancel/modify = linear scan  -> O(total resting orders)
-//     of the entire book
+// Its semantics are what every other engine must reproduce: price-time
+// priority, partial fills, GTC/IOC/FOK, and the modify rule (a size decrease
+// at the same price keeps queue position; anything else is a cancel plus a
+// fresh submit).
 //
-// The matching semantics are exactly what every optimized engine must
-// reproduce: price-time priority, partial fills, GTC/IOC/FOK, and the modify
-// rule (qty decrease at same price keeps queue position; anything else is
-// cancel + fresh submit). Only the mechanics are slow.
-//
-// Not implemented here (checked only in the real engines): duplicate-id
-// rejection (needs an id index the naive book deliberately lacks) and
-// self-trade prevention (owner is accepted but ignored; differential tests
-// run with Stp::None).
+// Not implemented here, so tested only on the indexed engines: duplicate-id
+// rejection (there is no id index) and self-trade prevention (owner is
+// accepted and ignored; differential tests run with Stp::None).
 template <class Listener = NullListener>
 class NaiveBookT {
 public:

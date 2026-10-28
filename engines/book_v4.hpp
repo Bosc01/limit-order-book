@@ -8,27 +8,21 @@
 
 namespace lob::v4 {
 
-// Engine v4 = v3 + branch discipline in the matching loop. ONE measured
-// change, in three parts:
+// Engine v4 = v3 + branch layout in the matching loop. One change, in
+// three parts:
 //
-//   1. STP specialization: the self-trade check was two extra compares on
-//      EVERY fill iteration even for books that never arm STP. The match
-//      loop is now templated on <Side, StpOn>; submit dispatches once per
-//      order, and with StpOn=false the check does not exist in the emitted
-//      code. Side was already a template parameter from v1 -- the bid and
-//      ask loops are two separately-compiled functions with the comparison
-//      direction baked in, not a per-iteration "which side am I" branch.
+//   1. The match loop is templated on <Side, StpOn> and submit dispatches
+//      once per order, so with STP off the per-fill self-trade compare is
+//      not compiled in. Side was already a template parameter in v1.
+//   2. The fill loop handles its two cases separately: the maker outlives
+//      the taker (reduce, report, exit), or the maker is used up (unlink,
+//      continue). v3 took min(qty, remaining) and then tested the maker for
+//      zero.
+//   3. [[likely]] and [[unlikely]] on validation rejects and TIF dispatch.
 //
-//   2. The inner fill loop is restructured from "compute min, then test if
-//      the maker hit zero" into two explicit cases: maker-outlives-taker
-//      (the common exit: reduce, report, done) and maker-fully-consumed
-//      (unlink and keep walking). One well-predicted branch replaces two
-//      data-dependent ones.
+// On the M5 this measured no change.
 //
-//   3. [[likely]]/[[unlikely]] annotations on validation rejects and TIF
-//      dispatch, so the fall-through path is the straight-line one.
-//
-// Still untouched: std::map ladder (v5), unordered_map id index (v6).
+// Still untouched: std::map ladder (v5), unordered_map id index (final).
 template <class Listener = NullListener>
 class BookT {
 public:
@@ -141,7 +135,7 @@ private:
         Level*  level;
         Side    side;
     };
-    static_assert(sizeof(Order) == 64, "Order must fill exactly one cache line");
+    static_assert(sizeof(Order) == 64, "Order must be one 64-byte slot");
 
     struct Level {
         Order*        head = nullptr;

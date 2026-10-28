@@ -8,45 +8,16 @@
 
 namespace lob {
 
-// The final engine. Three layered data structures, each answering one
-// question in O(1):
+// Price-time priority matching for one instrument, single-threaded.
 //
-//   "What is the best price?"        flat banded ladder per side: a Level
-//                                    array indexed by price tick, an
-//                                    occupancy bitmap, and a cached best
-//                                    cursor. Level lookup is one add; best
-//                                    is a cached read; "next best after the
-//                                    top emptied" is a bitmap scan
-//                                    (count-zeros instruction per word).
+//   best price        per-side Level array over [band_lo, band_hi), an
+//                     occupancy bitmap, and a cached best tick
+//   queue at a price  intrusive doubly linked FIFO through the Orders
+//   order by id       IdMap<Order*>
 //
-//   "Who is first at this price?"    intrusive doubly-linked FIFO through
-//                                    the orders themselves. Head = oldest =
-//                                    fills first (time priority). Intrusive
-//                                    means links live inside the Order: no
-//                                    node allocations, and an Order* is
-//                                    enough to unlink in O(1).
-//
-//   "Where is order #id?"            open-addressing hash map (id -> Order*)
-//                                    with linear probing and backward-shift
-//                                    deletion. Cancel and modify never
-//                                    search the book.
-//
-// Memory: every Order lives in a pre-sized slab pool (one 64-byte cache
-// line each), the ladder and bitmap are allocated at construction, and the
-// id map is a pre-sized flat array. At steady state the engine performs
-// ZERO heap allocations -- the benchmark's interposed operator new proves it.
-//
-// Threading model: none, on purpose. One engine instance = one thread. The
-// determinism that makes the differential tests possible is the same
-// property production risk teams want: same input stream, same book, every
-// time. Cross-thread handoff belongs at the edges (gateway/feed), not in
-// the matching core.
-//
-// The band: prices outside [band_lo, band_hi) are rejected at the door.
-// Real venues bound prices too (price bands / limit-up-limit-down); sizing
-// the array to the instrument's plausible range is the trade that buys O(1)
-// level access. OrderId 0 is likewise reserved (empty-slot sentinel in the
-// id map).
+// Orders live in a pre-faulted slab Pool. With the pool and id map sized for
+// the session, nothing on the hot path allocates. Prices outside the band
+// are rejected, and OrderId 0 is reserved as the id map's empty key.
 template <class Listener = NullListener>
 class OrderBookT {
 public:
@@ -105,15 +76,6 @@ public:
                    : match<Side::Ask, true>(id, ask_lim, qty, owner).filled;
     }
 
-    // Cancel, the operation the architecture is built around, step by step:
-    //   1. id map lookup                          O(1), ~1.5 probes
-    //   2. unlink from the level's intrusive list O(1), pointer swings
-    //   3. update level aggregates                same cache line as (2)'s head/tail
-    //   4. if the level emptied: clear its bitmap bit; if it held the best
-    //      cursor, scan for the new best          O(d/64), d = ticks to the
-    //                                             next occupied level; at
-    //                                             most band/64 word reads
-    //   5. id map erase + pool recycle            O(1), no free() call
     bool cancel(OrderId id) {
         Order** slot = orders_.find(id);
         if (slot == nullptr) return false;
@@ -124,12 +86,10 @@ public:
         return true;
     }
 
-    // Exchange-standard amend semantics: quantity decrease at the same price
-    // amends in place and KEEPS queue position; a price change or quantity
-    // increase forfeits priority -- the order re-enters as a fresh GTC
-    // arrival (and may cross). A qty-0 amend is rejected, not treated as a
-    // cancel: cancel(id) is the only removal path. `found` disambiguates
-    // "id unknown, order is gone" from "bad amend, order still live".
+    // A size decrease at the same price amends in place and keeps queue
+    // position. Any other change is a cancel plus a fresh GTC arrival, which
+    // may cross. qty 0 is rejected, not treated as a cancel. `found` tells
+    // "unknown id" apart from "rejected amend, order still live".
     ModifyResult modify(OrderId id, Price new_px, Qty new_qty) {
         Order** slot = orders_.find(id);
         if (slot == nullptr) return {};
@@ -167,8 +127,7 @@ public:
 
     std::size_t resting_orders() const { return orders_.size(); }
 
-    // Top-n depth snapshot for market-data publishing: walks best-to-worse
-    // via the bitmap. Returns the number of occupied levels written.
+    // Up to n occupied levels, best first. Returns the number written.
     int top_levels(Side side, int n, Price* out_px, std::uint64_t* out_qty) const {
         int written = 0;
         auto walk = [&](const auto& ladder) {
@@ -184,7 +143,8 @@ public:
         return written;
     }
 
-    // Debug/test-only structural audit; never on the hot path.
+    // Full structural audit for tests, O(band + resting orders). Returns
+    // nullptr or a description of the first violation.
     const char* check_invariants() const {
         std::size_t seen = 0;
         if (const char* e = check_side(bids_, Side::Bid, seen)) return e;
@@ -202,9 +162,10 @@ private:
 
     struct Level;
 
-    // Exactly one cache line per order (the pool aligns slabs to 64), hot
-    // fields in the front half: the match loop touches qty/owner/next/id/
-    // price every fill; prev/level/side only matter on cancel paths.
+    // A 64-byte slot on a 64-byte boundary, so an order never straddles a
+    // cache line (64 bytes on x86, 128 on Apple M-series). The fill loop
+    // reads qty, owner, next, and id; prev, level, and side are for
+    // unlinking.
     struct alignas(64) Order {
         Qty     qty;
         Owner   owner;
@@ -215,10 +176,10 @@ private:
         Level*  level;
         Side    side;
     };
-    static_assert(sizeof(Order) == 64, "Order must fill exactly one cache line");
+    static_assert(sizeof(Order) == 64, "Order must be one 64-byte slot");
 
-    // One line per level: an append or fill touches head/tail/totals
-    // together, and neighboring levels never share the line.
+    // 40 bytes of fields padded to 64, so no level straddles a cache line.
+    // The cost is 64 bytes per tick per side.
     struct alignas(64) Level {
         Order*        head = nullptr;
         Order*        tail = nullptr;
@@ -227,7 +188,6 @@ private:
         Price         price = 0;
     };
 
-    // Flat per-side ladder: Level array + occupancy bitmap + cached best.
     template <Side S>
     class Ladder {
     public:
@@ -250,9 +210,8 @@ private:
             if (best_ == kNoPrice || better(px, best_)) best_ = px;
         }
 
-        // The flat ladder's tail-latency source: usually the next occupied
-        // bit is in the same word (spreads are tight), but after a deep
-        // sweep the scan may walk several 64-tick words.
+        // Rescans only when the best level empties: d/64 word reads, where
+        // d is the gap to the next occupied tick.
         void on_empty(Price px) {
             const std::size_t i = static_cast<std::size_t>(px - lo_);
             words_[i >> 6] &= ~(1ull << (i & 63));
@@ -315,7 +274,7 @@ private:
 
     template <Side S>
     SubmitResult execute(OrderId id, Price px, Qty qty, Tif tif, Owner owner) {
-        // One runtime STP dispatch per order; zero checks per fill when off.
+        // One STP dispatch per order, none per fill.
         const bool stp_on = (stp_ != Stp::None);
         if (tif == Tif::FOK) [[unlikely]] {
             const bool fillable = stp_on ? fok_fillable<S, true>(px, qty, owner)
@@ -327,8 +286,8 @@ private:
                                       : match<S, false>(id, px, qty, owner);
         SubmitResult r{m.filled, false, false};
         if (m.stp_stopped) [[unlikely]] {
-            // RejectIncoming: the incoming order dies where it met its own
-            // resting order; fills already done (against others) stand.
+            // RejectIncoming stopped the order at its own resting order.
+            // Fills against other owners before that point stand.
             r.rejected = (m.filled == 0);
             return r;
         }
@@ -339,10 +298,8 @@ private:
         return r;
     }
 
-    // The matching loop. Side is a template parameter, so the bid and ask
-    // paths are separately compiled with the comparison direction baked in;
-    // StpOn likewise compiles the self-trade check out of existence for
-    // books that never arm it.
+    // Four instantiations: the price comparison is fixed per side, and with
+    // StpOn false the self-trade check is not compiled in.
     template <Side S, bool StpOn>
     MatchOutcome match(OrderId taker, Price limit_px, Qty want, Owner owner) {
         auto& opp = opposite_ladder<S>();
@@ -356,13 +313,12 @@ private:
             Order* o = lvl.head;
             while (o != nullptr) {
                 if constexpr (StpOn) {
-                    // owner 0 = ungrouped flow, exempt from STP by contract
-                    if (owner != 0 && o->owner == owner) {
+                    if (owner != 0 && o->owner == owner) { // owner 0 is exempt
                         if (stp_ == Stp::RejectIncoming) {
                             m.stp_stopped = true;
                             break;
                         }
-                        // CancelResting: own order leaves unfilled.
+                        // CancelResting: the resting order leaves unfilled.
                         listener_.on_cancel(o->id, o->owner);
                         Order* next = o->next;
                         orders_.erase(o->id);
@@ -373,16 +329,15 @@ private:
                     }
                 }
                 if (o->qty > remaining) {
-                    // Maker outlives taker: the common exit. Reduce, report,
-                    // done -- no unlink, no map traffic.
+                    // Partial fill of the maker: the common exit, with no
+                    // unlink and no id-map traffic.
                     o->qty        -= remaining;
                     lvl.total_qty -= remaining;
                     listener_.on_trade(taker, o->id, lvl.price, remaining);
                     remaining = 0;
                     break;
                 }
-                // Maker fully consumed: report, unlink, keep walking.
-                const Qty take = o->qty;
+                const Qty take = o->qty; // maker fully filled
                 Order* next = o->next;
                 remaining -= take;
                 listener_.on_trade(taker, o->id, lvl.price, take);
@@ -399,10 +354,9 @@ private:
         return m;
     }
 
-    // FOK pre-check: is `qty` reachable at crossing prices under the active
-    // STP policy? With no STP it sums level aggregates; with STP it must
-    // walk orders, because own resting qty either does not count
-    // (CancelResting) or blocks entirely (RejectIncoming).
+    // Is `qty` reachable at crossing prices? Without STP this sums level
+    // totals. With STP it walks orders: the taker's own resting quantity
+    // does not count (CancelResting) or blocks the order (RejectIncoming).
     template <Side S, bool StpOn>
     bool fok_fillable(Price px, Qty qty, Owner owner) const {
         const auto& opp = opposite_ladder_c<S>();

@@ -78,10 +78,8 @@ TYPED_TEST(IndexedEngineTest, SelfTrade_CancelRestingKnocksOutOwnOrder) {
     EXPECT_EQ(b.listener().cancels[0], (lobtest::Cancel{1, 7}));
 }
 
-// Owner 0 = ungrouped flow, EXEMPT from STP. Without this reservation two
-// unrelated flows that both default the owner would silently self-match-
-// prevent each other (found by adversarial review; venues scope prevention
-// to explicitly shared groups).
+// Owner 0 is ungrouped and exempt from STP. Regression test: two unrelated
+// flows that both defaulted the owner used to block each other.
 TYPED_TEST(IndexedEngineTest, SelfTrade_OwnerZeroExemptUnderCancelResting) {
     TypeParam b(Stp::CancelResting);
     b.submit_limit(1, Side::Ask, 100, 5, Tif::GTC, 0);
