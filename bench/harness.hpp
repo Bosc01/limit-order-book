@@ -79,6 +79,23 @@ RunResult run_ops_gated(Book& book, std::span<const Op> ops, std::size_t warmup,
     return r;
 }
 
+// Throughput without the probe: the same ops on a fresh book, no per-op
+// timestamps. Each timestamp read above sits behind an isb, which drains
+// the pipeline, so the timed loop cannot overlap one op's cache misses with
+// the next op's work the way an untimed message loop does. The timed pass
+// is for latency, this one for throughput. Returns the measured seconds.
+// noinline gives profilers a frame to attribute the pass to.
+template <class Book>
+[[gnu::noinline]] double run_ops_untimed(Book& book, std::span<const Op> ops, std::size_t warmup) {
+    for (std::size_t i = 0; i < warmup; ++i)
+        do_not_optimize(dispatch(book, ops[i]));
+    const auto w0 = std::chrono::steady_clock::now();
+    for (std::size_t i = warmup; i < ops.size(); ++i)
+        do_not_optimize(dispatch(book, ops[i]));
+    const auto w1 = std::chrono::steady_clock::now();
+    return std::chrono::duration<double>(w1 - w0).count();
+}
+
 template <class Book>
 RunResult run_ops(Book& book, std::span<const Op> ops, std::size_t warmup) {
     // Count allocations over the MEASURED region only: the sample buffer

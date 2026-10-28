@@ -205,6 +205,7 @@ void json_summary(FILE* f, const char* name, const bench::Summary& s, bool last)
 
 struct RunRecord {
     double        throughput = 0, wall_seconds = 0;
+    double        untimed_throughput = 0, untimed_wall_seconds = 0;
     std::uint64_t heap_allocations = 0;
     std::size_t   resting_at_end = 0;
     bench::Summary all, per_kind[bench::kNumOpKinds];
@@ -234,6 +235,8 @@ bool write_json(const Config& cfg, const Machine& m, const bench::ClockCalibrati
                  cal.ns_per_tick, cal.resolution_ns);
     std::fprintf(f, "  \"throughput_ops_per_s\": %.0f,\n  \"wall_seconds\": %.4f,\n",
                  r.throughput, r.wall_seconds);
+    std::fprintf(f, "  \"untimed_throughput_ops_per_s\": %.0f,\n  \"untimed_wall_seconds\": %.4f,\n",
+                 r.untimed_throughput, r.untimed_wall_seconds);
     std::fprintf(f, "  \"heap_allocations\": %llu,\n  \"resting_orders_at_end\": %zu,\n",
                  (unsigned long long)r.heap_allocations, r.resting_at_end);
     std::fprintf(f, "  \"latency\": {\n");
@@ -376,6 +379,17 @@ int run_benchmark(const Config& cfg, const Machine& machine) {
     rec.wall_seconds     = run.wall_seconds;
     rec.heap_allocations = allocs;
     rec.resting_at_end   = book.resting_orders();
+    bookp.reset();
+    auto fresh = make_book<Book>(cfg);
+    rec.untimed_wall_seconds = bench::run_ops_untimed(*fresh, ops, cfg.warmup);
+    rec.untimed_throughput   = cfg.ops / rec.untimed_wall_seconds;
+    // Same ops on a fresh book must leave the same book; anything else means
+    // the untimed pass did not do the work it is credited with.
+    if (fresh->resting_orders() != rec.resting_at_end) {
+        std::fprintf(stderr, "untimed pass ended with %zu resting orders, timed pass %zu\n",
+                     fresh->resting_orders(), rec.resting_at_end);
+        return 1;
+    }
 
     std::printf("\nengine=%s label=%s\n", cfg.engine.c_str(), cfg.label.c_str());
     std::printf("  %-8s %9s  %10s %8s %8s %8s %8s %10s\n",
@@ -389,11 +403,13 @@ int run_benchmark(const Config& cfg, const Machine& machine) {
     print_row("ALL", rec.all);
     append_csv(cfg, "ALL", rec.all, throughput);
 
-    std::printf("\nthroughput: %.0f ops/s (%.2f s wall for %zu ops)\n",
+    std::printf("\nthroughput, timed pass:   %.0f ops/s (%.2f s wall for %zu ops)\n",
                 throughput, run.wall_seconds, cfg.ops);
+    std::printf("throughput, untimed pass: %.0f ops/s (%.2f s wall, same ops, fresh book)\n",
+                rec.untimed_throughput, rec.untimed_wall_seconds);
     std::printf("heap allocations in measured region: %llu (%.3f per op)\n",
                 (unsigned long long)allocs, double(allocs) / cfg.ops);
-    std::printf("resting orders at end: %zu\n", book.resting_orders());
+    std::printf("resting orders at end: %zu\n", rec.resting_at_end);
     std::printf("csv appended: %s\n", cfg.csv.c_str());
     if (!cfg.json.empty()) {
         if (!write_json(cfg, machine, cal, rec)) return 1;
