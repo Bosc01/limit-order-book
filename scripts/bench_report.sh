@@ -1,45 +1,53 @@
 #!/bin/bash
-# Reproduces the README benchmark table: RUNS back-to-back runs of the final
-# engine (2M measured operations each, seed 42), with every run's full output
-# and CSV rows saved under results/, then the median of each figure.
-# Usage: scripts/bench_report.sh [build-dir]    (RUNS=5 by default)
+# Runs one batch of benchmark runs and keeps every run:
+#   results/BATCH/NAME-I.json   one file per run (bench --json)
+#   results/BATCH/output.txt    every run's full printout
+#   results/BATCH/builds.txt    name, engine, and source commit of each entry
+# Each entry is NAME=BUILD_DIR[:ENGINE]; the engine defaults to final. With
+# several entries the runs interleave (A B, then B A, ...), so drift in
+# machine load lands on every entry alike. Ends by printing the summary.
+#   scripts/bench_report.sh baseline final=build
+#   scripts/bench_report.sh try-x before=../old/build after=build
+# RUNS (default 5), OPS (2000000) and WARMUP (100000) override the defaults.
 set -eu
-BUILD="${1:-build}"
-RUNS="${RUNS:-5}"
+[ $# -ge 2 ] || { sed -n 2,12p "$0"; exit 1; }
+BATCH="$1"; shift
+RUNS="${RUNS:-5}"; OPS="${OPS:-2000000}"; WARMUP="${WARMUP:-100000}"
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$DIR"
-STAMP="$(date +%Y-%m-%d)"
-LOG="results/bench_$STAMP.txt"
-CSV="results/bench_$STAMP.csv"
-rm -f "$LOG" "$CSV"
+OUT="results/$BATCH"
+[ ! -e "$OUT" ] || { echo "$OUT already exists; choose a new batch name"; exit 1; }
 
-for i in $(seq 1 "$RUNS"); do
-    echo "===== run $i of $RUNS: $BUILD/bench final --ops 2000000 --warmup 100000 =====" >> "$LOG"
-    "$BUILD/bench" final --ops 2000000 --warmup 100000 \
-        --label "$STAMP-run$i" --csv "$CSV" >> "$LOG"
+names=(); builds=(); engines=()
+for e in "$@"; do
+    name="${e%%=*}"; rest="${e#*=}"; build="${rest%%:*}"; engine=final
+    [ "$rest" = "$build" ] || engine="${rest#*:}"
+    cmake --build "$build" --target bench > /dev/null
+    names+=("$name"); builds+=("$build"); engines+=("$engine")
 done
 
-# Median of column $2 over the CSV rows for operation kind $1.
-median() {
-    awk -F, -v k="$1" -v c="$2" '$5 == k { print $c }' "$CSV" | sort -n |
-        awk '{ v[NR] = $1 } END { print v[int((NR + 1) / 2)] }'
-}
+mkdir -p "$OUT"
+for i in "${!names[@]}"; do
+    src="$(sed -n 's/^CMAKE_HOME_DIRECTORY:INTERNAL=//p' "${builds[$i]}/CMakeCache.txt")"
+    commit="$(git -C "$src" rev-parse --short HEAD)"
+    git -C "$src" diff --quiet HEAD -- . ':!results' || commit="$commit-dirty"
+    echo "${names[$i]} ${engines[$i]} $commit" >> "$OUT/builds.txt"
+done
 
-grep -m1 '^machine:' "$LOG"
-grep -m1 '^build:' "$LOG" | sed 's/; load average.*//'
-echo "load average at the start of each run:"
-grep 'load average' "$LOG" | sed 's/.*load average at start: /  /'
-echo "timer resolution: $(grep -m1 -o 'resolution [0-9.]* ns' "$LOG" | cut -d' ' -f2) ns"
-echo
-echo "median of $RUNS runs, nanoseconds per operation:"
-printf "  %-7s %8s %6s %6s %7s\n" kind mean p50 p99 p99.9
-for k in ALL limit market cancel modify; do
-    printf "  %-7s %8s %6s %6s %7s\n" "$k" "$(median $k 7)" "$(median $k 8)" \
-        "$(median $k 10)" "$(median $k 11)"
+order=("${!names[@]}"); reversed=()
+for ((i = ${#names[@]} - 1; i >= 0; i--)); do reversed+=("$i"); done
+for r in $(seq 1 "$RUNS"); do
+    # Odd rounds run the entries in order, even rounds in reverse, so no
+    # entry always goes first; position effects showed up as a fake +12%
+    # when one build ran against itself in a fixed order.
+    [ $((r % 2)) -eq 1 ] && idx=("${order[@]}") || idx=("${reversed[@]}")
+    for i in "${idx[@]}"; do
+        echo "run $r of $RUNS: ${names[$i]}"
+        echo "===== ${names[$i]} run $r: bench ${engines[$i]} --ops $OPS --warmup $WARMUP =====" >> "$OUT/output.txt"
+        "${builds[$i]}/bench" "${engines[$i]}" --ops "$OPS" --warmup "$WARMUP" \
+            --label "$BATCH/${names[$i]}-$r" --csv /dev/null \
+            --json "$OUT/${names[$i]}-$r.json" >> "$OUT/output.txt"
+    done
 done
 echo
-echo "throughput, median: $(median ALL 13) ops/s"
-echo "throughput per run: $(awk -F, '$5 == "ALL" { printf "%s ", $13 }' "$CSV")"
-echo "heap allocations in measured regions: $(grep -c 'allocations in measured region: 0 ' "$LOG") of $RUNS runs at zero"
-echo
-echo "saved: $LOG and $CSV"
+python3 scripts/results.py summary "$OUT"
