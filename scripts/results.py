@@ -88,6 +88,18 @@ def verdict(base, cand):
     return "no clear change, ranges overlap"
 
 
+# An attempt counts only when its unchanged "before" build ran at the speed
+# the baseline batch recorded: a slowed machine moves both builds and hides
+# any difference. The check reads only the before entry, never the after.
+VALID_BAND = 0.10
+
+
+def validity(baseline, base):
+    ref = statistics.median(baseline.values(UNTIMED))
+    off = (statistics.median(base.values(UNTIMED)) - ref) / ref
+    return None if abs(off) <= VALID_BAND else f"{100.0 * off:+.0f}% from the baseline"
+
+
 def loads(entries):
     xs = [r["machine"]["load_average"][0] for e in entries for r in e.runs]
     return f"{min(xs):.2f} to {max(xs):.2f}"
@@ -165,19 +177,22 @@ def operations(batch, name):
     return "\n".join(lines) + "\n"
 
 
-def attempts(*batches):
+def attempts(baseline_batch, *batches):
+    baseline = load(baseline_batch)[0]
     lines = [
-        "| attempt | change | before, Mops/s | after, Mops/s | median | "
-        "mean ns before / after | verdict |",
+        "| batch | change | before, Mops/s | after, Mops/s | median | "
+        "load | verdict |",
         "|---|---|---|---|---|---|---|",
     ]
     for batch in batches:
-        base, cand = load(batch)[0], load(batch)[-1]
+        entries = load(batch)
+        base, cand = entries[0], entries[-1]
+        bad = validity(baseline, base)
         lines.append(
             f"| `{batch}` | {cand.note} | {med_range(base.values(UNTIMED))} | "
             f"{med_range(cand.values(UNTIMED))} | {delta(base, cand):+.1f}% | "
-            f"{base.lat('all', 'mean_ns'):.1f} / {cand.lat('all', 'mean_ns'):.1f} | "
-            f"{verdict(base, cand)} |")
+            f"{loads(entries)} | "
+            f"{f'not valid: before build ran {bad}' if bad else verdict(base, cand)} |")
     return "\n".join(lines) + "\n"
 
 

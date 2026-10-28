@@ -44,6 +44,8 @@ for r in $(seq 1 "$RUNS"); do
     for i in "${idx[@]}"; do
         echo "run $r of $RUNS: ${names[$i]}"
         echo "===== ${names[$i]} run $r: bench ${engines[$i]} --ops $OPS --warmup $WARMUP =====" >> "$OUT/output.txt"
+        # Power moves the numbers too, and the benchmark cannot see it.
+        pmset -g batt 2>/dev/null | sed -n 2p >> "$OUT/output.txt" || true
         "${builds[$i]}/bench" "${engines[$i]}" --ops "$OPS" --warmup "$WARMUP" \
             --label "$BATCH/${names[$i]}-$r" --csv /dev/null \
             --json "$OUT/${names[$i]}-$r.json" >> "$OUT/output.txt"
