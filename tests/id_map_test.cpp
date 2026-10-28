@@ -35,6 +35,20 @@ TEST(IdMap, EraseMissingReturnsFalse) {
     EXPECT_FALSE(m.erase(5));
 }
 
+TEST(IdMap, TakeReturnsValueAndRemoves) {
+    lob::IdMap<int> m(16);
+    int out = 0;
+    EXPECT_FALSE(m.take(9, out));
+    m.insert(9, 90);
+    m.insert(10, 100);
+    EXPECT_TRUE(m.take(9, out));
+    EXPECT_EQ(out, 90);
+    EXPECT_EQ(m.find(9), nullptr);
+    EXPECT_EQ(*m.find(10), 100);
+    EXPECT_FALSE(m.take(9, out));
+    EXPECT_EQ(m.size(), 1u);
+}
+
 TEST(IdMap, GrowthRehashPreservesEntries) {
     lob::IdMap<int> m(16); // tiny: forces several rehashes
     for (std::uint64_t k = 1; k <= 1000; ++k) ASSERT_TRUE(m.insert(k, int(k * 3)));
@@ -55,7 +69,7 @@ TEST(IdMap, DifferentialVsUnorderedMap200k) {
 
     for (int i = 0; i < 200'000; ++i) {
         const std::uint64_t r  = rng();
-        const std::uint64_t op = r % 3;
+        const std::uint64_t op = r % 4;
         // Narrow key space (1..4095) so collisions and re-insertion of
         // recently erased keys are constant.
         const std::uint64_t k = 1 + (rng() % 4095);
@@ -63,6 +77,14 @@ TEST(IdMap, DifferentialVsUnorderedMap200k) {
             EXPECT_EQ(m.insert(k, i), ref.emplace(k, i).second) << "step " << i;
         } else if (op == 1) {
             EXPECT_EQ(m.erase(k), ref.erase(k) > 0) << "step " << i;
+        } else if (op == 2) {
+            std::uint64_t v = 0;
+            auto it = ref.find(k);
+            ASSERT_EQ(m.take(k, v), it != ref.end()) << "step " << i;
+            if (it != ref.end()) {
+                EXPECT_EQ(v, it->second) << "step " << i;
+                ref.erase(it);
+            }
         } else {
             auto* p  = m.find(k);
             auto  it = ref.find(k);
