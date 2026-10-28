@@ -1,32 +1,27 @@
 #pragma once
 #include <cstdint>
 #include <cstring>
-#include <functional>
 
 #include "protocol.hpp"
 
 namespace lobnet {
 
-// TCP delivers a byte stream, not messages: one recv() can hold half a
-// frame, three frames, or a frame and a half. This class owns that
-// reassembly, and NOTHING else -- no sockets -- so the parser can be unit
-// tested and fuzzed by feeding bytes in adversarial chunkings.
-//
-// Security posture: the peer is untrusted. A frame longer than
-// kMaxFrameLen, a zero-length frame, or a buffer overflow attempt is a
-// protocol violation -- the connection is poisoned and the caller must drop
-// it (that is what real exchange gateways do; there is no "resync" on a
-// corrupted binary stream).
+// Reassembles frames from a TCP byte stream. No sockets, so it can be fed
+// arbitrary chunkings in tests. A zero or over-long length prefix poisons
+// the buffer: there is no resynchronizing a binary stream, so the caller
+// drops the connection.
 class FrameBuffer {
 public:
-    static constexpr std::size_t kCapacity = 4096; // frames are <= 64 + 2 bytes
+    static constexpr std::size_t kCapacity = 4096;
+    // After drain() at most one partial frame remains, so the buffer can
+    // never fill with an undeliverable frame.
+    static_assert(kCapacity >= kHeaderLen + kMaxFrameLen);
 
-    // Feed raw bytes; invokes sink(body, len) for each complete frame, where
-    // body starts at the type byte. Returns false on protocol violation
-    // (caller should disconnect the peer). After false, the buffer is
-    // poisoned: every later call also returns false.
-    bool feed(const std::uint8_t* data, std::size_t n,
-              const std::function<void(const std::uint8_t*, std::size_t)>& sink) {
+    // Calls sink(body, len) for each complete frame, body starting at the
+    // type byte. Returns false on a protocol violation; after that every
+    // call returns false.
+    template <class Sink>
+    bool feed(const std::uint8_t* data, std::size_t n, Sink&& sink) {
         if (poisoned_) return false;
         while (n > 0) {
             // Top up the internal buffer.
@@ -38,25 +33,18 @@ public:
             n     -= take;
 
             if (!drain(sink)) return false;
-
-            // If the buffer is still full after draining, the peer sent a
-            // frame that cannot fit -- with kCapacity >> max frame size this
-            // only happens on garbage input.
-            if (fill_ == kCapacity) {
-                poisoned_ = true;
-                return false;
-            }
         }
         return true;
     }
 
 private:
-    bool drain(const std::function<void(const std::uint8_t*, std::size_t)>& sink) {
+    template <class Sink>
+    bool drain(Sink& sink) {
         std::size_t pos = 0;
         while (fill_ - pos >= kHeaderLen) {
             std::uint16_t len;
             std::memcpy(&len, buf_ + pos, sizeof(len));
-            if (len == 0 || len > kMaxFrameLen) { // attacker-controlled length
+            if (len == 0 || len > kMaxFrameLen) {
                 poisoned_ = true;
                 return false;
             }
@@ -64,8 +52,7 @@ private:
             sink(buf_ + pos + kHeaderLen, len);
             pos += kHeaderLen + len;
         }
-        // Shift the partial remainder to the front. Frames are tiny, so this
-        // memmove is a few dozen bytes at worst.
+        // At most kHeaderLen + kMaxFrameLen - 1 bytes move.
         if (pos > 0) {
             std::memmove(buf_, buf_ + pos, fill_ - pos);
             fill_ -= pos;

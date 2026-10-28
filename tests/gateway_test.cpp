@@ -93,7 +93,7 @@ TEST(GatewayOwnership, TwoClientsCanBothUseId1) {
     EXPECT_EQ(request(book, b, NewOrderMsg{1, 106, 5, Side::Ask, Tif::GTC}).status,
               ExecStatus::Rejected);
     EXPECT_EQ(request(book, b, MarketMsg{1, 5, Side::Bid}).status,
-              ExecStatus::Canceled);
+              ExecStatus::Rejected);
     EXPECT_EQ(book.qty_at(Side::Ask, 104), 20u);
 }
 
@@ -133,7 +133,7 @@ TEST(GatewayOwnership, MappingLeavesWithTheOrder) {
 
     // A reprice that trades away completely leaves the book too.
     const auto mod = request(book, a, ModifyMsg{6, 110, 3});
-    EXPECT_EQ(mod.status, ExecStatus::Replaced);
+    EXPECT_EQ(mod.status, ExecStatus::Filled);
     EXPECT_EQ(mod.filled, 3u);
     EXPECT_TRUE(in_sync());
     EXPECT_EQ(request(book, a, CancelMsg{6}).status, ExecStatus::Unknown);
@@ -228,6 +228,66 @@ TEST(GatewayOwnership, DisconnectCancelsOnlyThatClientsOrders) {
     EXPECT_EQ(request(book, c, ModifyMsg{1, 110, 4}).status, ExecStatus::Replaced);
     EXPECT_EQ(cancel_on_disconnect(book, feed, b.owner), 0u);
     EXPECT_EQ(feed.orders.size(), book.resting_orders());
+}
+
+TEST(GatewayReports, MarketPartialFillIsPartialDone) {
+    Engine book;
+    Connection a{.owner = 1}, b{.owner = 2};
+    request(book, a, NewOrderMsg{1, 100, 5, Side::Ask, Tif::GTC});
+
+    const auto r = request(book, b, MarketMsg{1, 8, Side::Bid});
+    EXPECT_EQ(r.status, ExecStatus::PartialDone);
+    EXPECT_EQ(r.filled, 5u);
+    EXPECT_EQ(request(book, b, MarketMsg{2, 3, Side::Bid}).status, ExecStatus::Canceled);
+}
+
+TEST(GatewayReports, RepriceThatTradesAwayIsFilled) {
+    Engine book;
+    FeedPublisher& feed = book.listener();
+    Connection a{.owner = 1}, b{.owner = 2};
+    request(book, a, NewOrderMsg{1, 100, 5, Side::Bid, Tif::GTC});
+    request(book, b, NewOrderMsg{1, 103, 5, Side::Ask, Tif::GTC});
+
+    const auto r = request(book, a, ModifyMsg{1, 103, 5});
+    EXPECT_EQ(r.status, ExecStatus::Filled);
+    EXPECT_EQ(r.filled, 5u);
+    EXPECT_EQ(book.resting_orders(), 0u);
+    EXPECT_EQ(feed.orders.size(), 0u);
+}
+
+TEST(GatewayReports, RepriceStoppedByStpIsCanceledNotReplaced) {
+    Engine book(lob::Stp::RejectIncoming);
+    FeedPublisher& feed = book.listener();
+    Connection a{.owner = 1};
+    request(book, a, NewOrderMsg{1, 105, 5, Side::Ask, Tif::GTC});
+    request(book, a, NewOrderMsg{2, 100, 5, Side::Bid, Tif::GTC});
+
+    // The reprice crosses A's own ask, so the engine drops the order.
+    EXPECT_EQ(request(book, a, ModifyMsg{2, 105, 5}).status, ExecStatus::Canceled);
+    EXPECT_EQ(request(book, a, CancelMsg{2}).status, ExecStatus::Unknown);
+    EXPECT_EQ(book.qty_at(Side::Ask, 105), 5u);
+    EXPECT_EQ(feed.orders.size(), book.resting_orders());
+}
+
+TEST(GatewayReports, FramesAfterAPoisonedFrameAreNotExecuted) {
+    Engine book;
+    Connection a{.owner = 1};
+    std::vector<std::uint8_t> wire(128 * 3);
+    std::size_t n = encode(wire.data(), 128, NewOrderMsg{1, 100, 5, Side::Bid, Tif::GTC});
+    // An exec report is a gateway-to-client message; a client sending one
+    // is a protocol violation.
+    n += encode(wire.data() + n, 128, ExecReportMsg{9, 0, ExecStatus::Accepted});
+    n += encode(wire.data() + n, 128, NewOrderMsg{2, 99, 5, Side::Bid, Tif::GTC});
+
+    a.frames.feed(wire.data(), n, [&](const std::uint8_t* body, std::size_t len) {
+        handle_frame(book, book.listener(), a, body, len);
+    });
+    EXPECT_TRUE(a.dead);
+    EXPECT_EQ(book.resting_orders(), 1u);
+    EXPECT_EQ(book.qty_at(Side::Bid, 99), 0u);
+    const auto r = replies(a);
+    ASSERT_EQ(r.size(), 1u); // the first order's report is still owed
+    EXPECT_EQ(r[0].status, ExecStatus::Accepted);
 }
 
 } // namespace

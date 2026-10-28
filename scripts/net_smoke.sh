@@ -1,7 +1,8 @@
 #!/bin/bash
 # End-to-end smoke test: gateway + UDP feed subscriber + TCP order burst.
 # Asserts: every order acknowledged, feed saw trades and book updates with
-# zero sequence gaps (loopback UDP does not drop), gateway survives.
+# zero sequence gaps, gateway survives. Loopback UDP drops only when the
+# receive buffer overflows; one closed-loop client is far below that rate.
 set -u
 BUILD="${1:-build}"
 DIR="$(cd "$(dirname "$0")/.." && pwd)"

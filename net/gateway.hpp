@@ -7,6 +7,7 @@
 #include <functional>
 #include <map>
 #include <netinet/in.h>
+#include <optional>
 #include <sys/socket.h>
 #include <unordered_map>
 #include <utility>
@@ -43,9 +44,15 @@ public:
 
     // Records a resting order, or refreshes its open quantity.
     void rest(lob::OrderId id, lob::Owner owner, lob::OrderId client,
-              lob::Qty open) {
+              lob::Qty open, lob::Side side) {
         by_client_[{owner, client}] = id;
-        live_[id] = {owner, client, open};
+        live_[id] = {owner, client, open, side};
+    }
+
+    std::optional<lob::Side> side(lob::OrderId id) const {
+        const auto it = live_.find(id);
+        if (it == live_.end()) return std::nullopt;
+        return it->second.side;
     }
 
     // A resting order traded; once its open quantity is used up it has left
@@ -81,6 +88,7 @@ private:
         lob::Owner   owner;
         lob::OrderId client;
         lob::Qty     open;
+        lob::Side    side;
     };
     std::map<std::pair<lob::Owner, lob::OrderId>, lob::OrderId> by_client_;
     std::unordered_map<lob::OrderId, Live>                      live_;
@@ -177,8 +185,8 @@ using Engine = lob::OrderBookT<FeedPublisher>;
 struct Connection {
     int                  fd = -1;
     lob::Owner           owner = 0;
-    lobnet::FrameBuffer  frames;
-    std::vector<std::uint8_t> outbox; // pending bytes; capped, see below
+    lobnet::FrameBuffer  frames{};
+    std::vector<std::uint8_t> outbox{}; // pending bytes, capped at kMaxOutbox
     bool                 dead = false;
 };
 
@@ -186,8 +194,7 @@ inline constexpr std::size_t kMaxOutbox = 64 * 1024;
 
 inline void queue_send(Connection& c, const std::uint8_t* p, std::size_t n) {
     if (c.outbox.size() + n > kMaxOutbox) {
-        // Slow consumer: killing it protects everyone else's latency.
-        c.dead = true;
+        c.dead = true; // slow consumer: drop it rather than buffer without bound
         return;
     }
     c.outbox.insert(c.outbox.end(), p, p + n);
@@ -217,6 +224,7 @@ inline lobnet::ExecStatus submit_status(const lob::SubmitResult& r, lob::Qty wan
 
 inline void handle_frame(Engine& book, FeedPublisher& feed, Connection& c,
                          const std::uint8_t* body, std::size_t len) {
+    if (c.dead) return; // later frames in the same read are not executed
     const auto type = lobnet::peek_type(body, len);
     if (!type) { c.dead = true; return; }
     OrderIds& ids = feed.orders;
@@ -229,7 +237,7 @@ inline void handle_frame(Engine& book, FeedPublisher& feed, Connection& c,
             const lob::OrderId id = ids.assign(c.owner, m->id);
             const auto r =
                 book.submit_limit(id, m->side, m->px, m->qty, m->tif, c.owner);
-            if (r.rested) ids.rest(id, c.owner, m->id, m->qty - r.filled);
+            if (r.rested) ids.rest(id, c.owner, m->id, m->qty - r.filled, m->side);
             send_exec(c, m->id, r.filled, submit_status(r, m->qty));
             break;
         }
@@ -237,11 +245,14 @@ inline void handle_frame(Engine& book, FeedPublisher& feed, Connection& c,
             const auto m = lobnet::decode_market(body, len);
             if (!m) { c.dead = true; return; }
             feed.set_taker_side(m->side);
-            const auto filled = book.submit_market(ids.assign(c.owner, m->id),
-                                                   m->side, m->qty, c.owner);
+            const lob::OrderId id = ids.assign(c.owner, m->id);
+            const lob::Qty filled =
+                id ? book.submit_market(id, m->side, m->qty, c.owner) : 0;
             send_exec(c, m->id, filled,
-                      filled ? lobnet::ExecStatus::Filled
-                             : lobnet::ExecStatus::Canceled);
+                      id == 0          ? lobnet::ExecStatus::Rejected
+                      : filled == m->qty ? lobnet::ExecStatus::Filled
+                      : filled         ? lobnet::ExecStatus::PartialDone
+                                       : lobnet::ExecStatus::Canceled);
             break;
         }
         case lobnet::MsgType::Cancel: {
@@ -259,17 +270,26 @@ inline void handle_frame(Engine& book, FeedPublisher& feed, Connection& c,
             const auto m = lobnet::decode_modify(body, len);
             if (!m) { c.dead = true; return; }
             const lob::OrderId id = ids.find(c.owner, m->id);
+            const auto side = ids.side(id);
+            if (side) feed.set_taker_side(*side); // a reprice can trade
             const auto r = book.modify(id, m->new_px, m->new_qty);
-            // A reprice re-enters under the same engine id and may trade
-            // away completely, or be stopped by STP, instead of resting.
-            if (r.ok && r.rested) ids.rest(id, c.owner, m->id, m->new_qty - r.filled);
-            else if (r.ok)        ids.forget(id);
-            // Three distinct answers, as real venues send: replaced; amend
-            // rejected but the order is still live; or the id is gone.
-            send_exec(c, m->id, r.filled,
-                      r.ok    ? lobnet::ExecStatus::Replaced
-                      : r.found ? lobnet::ExecStatus::Rejected
-                                : lobnet::ExecStatus::Unknown);
+            // A reprice re-enters under the same engine id. It may rest, or
+            // trade away completely, or be stopped by STP.
+            if (r.ok && r.rested)
+                ids.rest(id, c.owner, m->id, m->new_qty - r.filled, *side);
+            else if (r.ok)
+                ids.forget(id);
+            // Rejected means the amend failed and the order is still live,
+            // so an order that is gone after a reprice is reported by how
+            // it ended.
+            lobnet::ExecStatus st = lobnet::ExecStatus::Unknown;
+            if (!r.ok)                       st = r.found ? lobnet::ExecStatus::Rejected
+                                                          : lobnet::ExecStatus::Unknown;
+            else if (r.rested)               st = lobnet::ExecStatus::Replaced;
+            else if (r.filled == m->new_qty) st = lobnet::ExecStatus::Filled;
+            else                             st = r.filled ? lobnet::ExecStatus::PartialDone
+                                                           : lobnet::ExecStatus::Canceled;
+            send_exec(c, m->id, r.filled, st);
             break;
         }
         default:

@@ -10,15 +10,10 @@
 //
 //   [len : u16][type : u8][payload ...]      len counts type + payload
 //
-// Real venues do the same shape (ITCH/OUCH are length-prefixed binary; ITCH
-// happens to be big-endian). We pick little-endian and assert the host
-// matches -- both deployment targets (arm64, x86_64) are LE, and a protocol
-// spec that matches the host means encode/decode is a copy, not a swap.
-//
-// Every decode is bounds-checked field-by-field via memcpy -- never by
-// casting the receive buffer to a packed struct. memcpy of known-size
-// fields is UB-free on any alignment, optimizes to plain loads, and makes
-// the "attacker controls the bytes" review tractable.
+// Little-endian because both targets (arm64, x86_64) are, and the build
+// asserts it. Decoding is field by field through memcpy, never by casting
+// the receive buffer to a packed struct, so it is defined at any alignment
+// and every read is bounds-checked.
 namespace lobnet {
 
 static_assert(std::endian::native == std::endian::little,

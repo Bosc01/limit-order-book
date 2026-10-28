@@ -1,18 +1,20 @@
 // Order-entry gateway + market-data publisher.
 //
-//   * TCP  (default :9001): order entry. Reliable, ordered, per-client -- an
-//     order MUST arrive exactly once and the sender must know if it did not.
-//   * UDP  (default 127.0.0.1:9002, multicast groups supported): market
-//     data. One publisher, many subscribers, freshest-data-wins; a lost
-//     tick is repaired by the next snapshot, not by retransmission delay.
+//   * TCP  (default :9001): order entry. Ordered and without duplicates
+//     within one connection. If the connection drops, orders in flight may
+//     or may not have executed; there are no session sequence numbers to
+//     recover that, which a real order-entry protocol would have.
+//   * UDP  (default 127.0.0.1:9002, multicast supported): market data, one
+//     publisher and any number of subscribers. Messages carry sequence
+//     numbers, so a subscriber can detect a gap. A lost book snapshot is
+//     superseded by the next one; a lost trade is gone.
 //
-// Single thread, one poll() loop, engine inline: "real, not fast". The
-// matching engine itself stays single-threaded on purpose; a production
-// system would pin this thread and hand fills to other cores via queues.
+// One thread, one poll() loop, the engine called inline.
 //
-// Security posture (the peer is hostile):
+// The peer is untrusted:
 //   * every frame is length-checked and field-decoded with bounds checks;
-//     any malformed byte poisons the connection and it is dropped
+//     a malformed frame stops processing on that connection, its pending
+//     reports are flushed, and it is closed
 //   * the participant id (owner) used for self-trade prevention is ASSIGNED
 //     by the gateway per connection -- a client cannot spoof someone else's
 //   * order ids are scoped per connection and mapped to engine ids the
@@ -133,8 +135,9 @@ int main(int argc, char** argv) {
             }
     };
 
+    std::vector<pollfd> pfds;
     while (!g_stop) {
-        std::vector<pollfd> pfds;
+        pfds.clear();
         pfds.push_back({listener, POLLIN, 0});
         for (auto& c : conns) {
             short ev = POLLIN;
@@ -162,7 +165,9 @@ int main(int argc, char** argv) {
             }
         }
 
-        for (std::size_t i = 0; i < conns.size(); ++i) {
+        // pfds covers the connections that existed when poll() ran; one
+        // accepted above is polled from the next iteration.
+        for (std::size_t i = 0; i + 1 < pfds.size(); ++i) {
             Connection& c = conns[i];
             const auto& p = pfds[i + 1];
             if (p.revents & (POLLERR | POLLHUP)) { c.dead = true; continue; }
@@ -192,6 +197,7 @@ int main(int argc, char** argv) {
 
         for (std::size_t i = conns.size(); i-- > 0;) {
             if (conns[i].dead) {
+                flush_outbox(conns[i]); // best effort: reports already earned
                 const std::size_t n = cancel_on_disconnect(book, feed, conns[i].owner);
                 std::printf("gateway: client %u disconnected, %zu orders canceled\n",
                             conns[i].owner, n);
