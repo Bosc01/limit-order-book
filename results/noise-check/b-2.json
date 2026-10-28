@@ -1,0 +1,24 @@
+{
+  "name": "noise-check/b-2",
+  "engine": "final",
+  "recorded_utc": "2026-10-28T00:18:49Z",
+  "seed": 42,
+  "measured_ops": 2000000,
+  "warmup_ops": 100000,
+  "machine": {"cpu": "Apple M5", "cores": "10 logical cores (4 performance, 6 efficiency)", "os": "Darwin 25.6.0 arm64", "load_average": [4.82, 4.19, 4.20]},
+  "build": {"compiler": "Apple LLVM 17.0.0 (clang-1700.6.3.2)", "build_type": "Release", "optimized": true, "flags": "-std=c++20 -O3 -DNDEBUG -O3 -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic"},
+  "timer": {"ns_per_unit": 1.0000, "resolution_ns": 41.7},
+  "throughput_ops_per_s": 23278359,
+  "wall_seconds": 0.0859,
+  "untimed_throughput_ops_per_s": 49582730,
+  "untimed_wall_seconds": 0.0403,
+  "heap_allocations": 0,
+  "resting_orders_at_end": 60225,
+  "latency": {
+    "all": {"count": 2000000, "mean_ns": 32.4, "p50_ns": 41, "p90_ns": 42, "p99_ns": 84, "p999_ns": 125, "max_ns": 9435},
+    "limit": {"count": 1099220, "mean_ns": 31.8, "p50_ns": 41, "p90_ns": 42, "p99_ns": 84, "p999_ns": 143, "max_ns": 8833},
+    "market": {"count": 100021, "mean_ns": 34.9, "p50_ns": 42, "p90_ns": 42, "p99_ns": 84, "p999_ns": 125, "max_ns": 1792},
+    "cancel": {"count": 600984, "mean_ns": 31.2, "p50_ns": 41, "p90_ns": 42, "p99_ns": 84, "p999_ns": 84, "max_ns": 9435},
+    "modify": {"count": 199775, "mean_ns": 38.1, "p50_ns": 42, "p90_ns": 83, "p99_ns": 84, "p999_ns": 166, "max_ns": 5084}
+  }
+}
