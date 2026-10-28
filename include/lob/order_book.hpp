@@ -106,17 +106,19 @@ public:
     }
 
     // Cancel, the operation the architecture is built around, step by step:
-    //   1. id map take, lookup plus erase         O(1), ~1.5 probes, one walk
+    //   1. id map lookup                          O(1), ~1.5 probes
     //   2. unlink from the level's intrusive list O(1), pointer swings
     //   3. update level aggregates                same cache line as (2)'s head/tail
     //   4. if the level emptied: clear its bitmap bit; if it held the best
     //      cursor, scan for the new best          O(d/64), d = ticks to the
     //                                             next occupied level; at
     //                                             most band/64 word reads
-    //   5. pool recycle                           O(1), no free() call
+    //   5. id map erase + pool recycle            O(1), no free() call
     bool cancel(OrderId id) {
-        Order* o;
-        if (!orders_.take(id, o)) return false;
+        Order** slot = orders_.find(id);
+        if (slot == nullptr) return false;
+        Order* o = *slot;
+        orders_.erase(id);
         remove_from_book(o);
         pool_.destroy(o);
         return true;

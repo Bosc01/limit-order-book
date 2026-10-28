@@ -62,40 +62,11 @@ public:
     }
 
     bool erase(OrderId k) {
-        const std::size_t i = probe(k);
-        if (slots_[i].key == 0) return false;
-        erase_at(i);
-        return true;
-    }
-
-    // Removes k and hands back its value: one probe walk where find() and
-    // then erase() would walk the same chain twice.
-    bool take(OrderId k, V& out) {
-        const std::size_t i = probe(k);
-        if (slots_[i].key == 0) return false;
-        out = slots_[i].val;
-        erase_at(i);
-        return true;
-    }
-
-    std::size_t size() const { return count_; }
-    std::size_t slot_count() const { return slots_.size(); }
-    std::size_t grow_count() const { return grows_; }
-
-private:
-    struct Slot {
-        OrderId key = 0;
-        V       val{};
-    };
-
-    // The slot holding k, or the empty slot that ends k's probe chain.
-    std::size_t probe(OrderId k) const {
         std::size_t i = hash(k) & mask_;
-        while (slots_[i].key != 0 && slots_[i].key != k) i = (i + 1) & mask_;
-        return i;
-    }
-
-    void erase_at(std::size_t i) {
+        while (slots_[i].key != k) {
+            if (slots_[i].key == 0) return false;
+            i = (i + 1) & mask_;
+        }
         // Backward shift: walk the rest of the probe cluster; any element
         // whose ideal slot lies cyclically at-or-before the hole would
         // become unreachable, so it moves into the hole and leaves a new
@@ -113,7 +84,18 @@ private:
         }
         slots_[hole].key = 0;
         --count_;
+        return true;
     }
+
+    std::size_t size() const { return count_; }
+    std::size_t slot_count() const { return slots_.size(); }
+    std::size_t grow_count() const { return grows_; }
+
+private:
+    struct Slot {
+        OrderId key = 0;
+        V       val{};
+    };
 
     // splitmix64 finalizer: cheap, and crucially it scatters SEQUENTIAL ids
     // (which is what gateways generate) across the table. Identity hashing
