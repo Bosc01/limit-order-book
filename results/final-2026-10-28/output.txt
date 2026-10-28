@@ -1,0 +1,115 @@
+===== final run 1: bench final --ops 2000000 --warmup 100000 =====
+ -InternalBattery-0 (id=34996323)	45%; charging; 2:39 remaining present: true
+machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), Release, optimized
+flags: -std=c++20 -O3 -DNDEBUG -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic
+load average at start: 4.81 4.09 3.72
+clock: 1.0000 ns per counter unit, resolution 41.7 ns, read overhead ~0 ns
+workload: 2100000 ops (100000 warmup + 2000000 measured), seed 42
+
+engine=final label=final-2026-10-28/final-1
+  kind         count     mean_ns      p50      p90      p99    p99.9        max
+  limit      1099220          25       41       42       84      167      28476
+  market      100021          27       41       42       84      125       9708
+  cancel      600984          25       41       42       83      125      13560
+  modify      199775          31       41       42       84      167       6060
+  ALL        2000000          26       41       42       84      167      28476
+
+throughput, timed pass:   28568946 ops/s (0.07 s wall for 2000000 ops)
+throughput, untimed pass: 67606492 ops/s (0.03 s wall, same ops, fresh book)
+heap allocations in measured region: 0 (0.000 per op)
+resting orders at end: 60225
+csv appended: /dev/null
+json written: results/final-2026-10-28/final-1.json
+===== final run 2: bench final --ops 2000000 --warmup 100000 =====
+ -InternalBattery-0 (id=34996323)	45%; charging; 2:39 remaining present: true
+machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), Release, optimized
+flags: -std=c++20 -O3 -DNDEBUG -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic
+load average at start: 4.81 4.09 3.72
+clock: 1.0000 ns per counter unit, resolution 41.7 ns, read overhead ~0 ns
+workload: 2100000 ops (100000 warmup + 2000000 measured), seed 42
+
+engine=final label=final-2026-10-28/final-2
+  kind         count     mean_ns      p50      p90      p99    p99.9        max
+  limit      1099220          24       41       42       83      125      13893
+  market      100021          26       41       42       83      125       3916
+  cancel      600984          24       41       42       42       84      13268
+  modify      199775          30       41       42       84      125      13559
+  ALL        2000000          25       41       42       83      125      13893
+
+throughput, timed pass:   29372799 ops/s (0.07 s wall for 2000000 ops)
+throughput, untimed pass: 67806092 ops/s (0.03 s wall, same ops, fresh book)
+heap allocations in measured region: 0 (0.000 per op)
+resting orders at end: 60225
+csv appended: /dev/null
+json written: results/final-2026-10-28/final-2.json
+===== final run 3: bench final --ops 2000000 --warmup 100000 =====
+ -InternalBattery-0 (id=34996323)	45%; charging; 2:39 remaining present: true
+machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), Release, optimized
+flags: -std=c++20 -O3 -DNDEBUG -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic
+load average at start: 4.81 4.09 3.72
+clock: 1.0000 ns per counter unit, resolution 41.7 ns, read overhead ~0 ns
+workload: 2100000 ops (100000 warmup + 2000000 measured), seed 42
+
+engine=final label=final-2026-10-28/final-3
+  kind         count     mean_ns      p50      p90      p99    p99.9        max
+  limit      1099220          25       41       42       84      208      13333
+  market      100021          27       41       42       83      166       1250
+  cancel      600984          24       41       42       42      125      10875
+  modify      199775          30       41       42       84      167       1500
+  ALL        2000000          25       41       42       83      167      13333
+
+throughput, timed pass:   28916847 ops/s (0.07 s wall for 2000000 ops)
+throughput, untimed pass: 66264843 ops/s (0.03 s wall, same ops, fresh book)
+heap allocations in measured region: 0 (0.000 per op)
+resting orders at end: 60225
+csv appended: /dev/null
+json written: results/final-2026-10-28/final-3.json
+===== final run 4: bench final --ops 2000000 --warmup 100000 =====
+ -InternalBattery-0 (id=34996323)	45%; charging; 2:39 remaining present: true
+machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), Release, optimized
+flags: -std=c++20 -O3 -DNDEBUG -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic
+load average at start: 4.81 4.09 3.72
+clock: 1.0000 ns per counter unit, resolution 41.6 ns, read overhead ~0 ns
+workload: 2100000 ops (100000 warmup + 2000000 measured), seed 42
+
+engine=final label=final-2026-10-28/final-4
+  kind         count     mean_ns      p50      p90      p99    p99.9        max
+  limit      1099220          24       41       42       83      125      17101
+  market      100021          26       41       42       83      125      12208
+  cancel      600984          24       41       42       42       84       9000
+  modify      199775          30       41       42       84      125       8309
+  ALL        2000000          25       41       42       83      125      17101
+
+throughput, timed pass:   29361425 ops/s (0.07 s wall for 2000000 ops)
+throughput, untimed pass: 66973163 ops/s (0.03 s wall, same ops, fresh book)
+heap allocations in measured region: 0 (0.000 per op)
+resting orders at end: 60225
+csv appended: /dev/null
+json written: results/final-2026-10-28/final-4.json
+===== final run 5: bench final --ops 2000000 --warmup 100000 =====
+ -InternalBattery-0 (id=34996323)	45%; charging; 2:39 remaining present: true
+machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), Release, optimized
+flags: -std=c++20 -O3 -DNDEBUG -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic
+load average at start: 4.81 4.09 3.72
+clock: 1.0000 ns per counter unit, resolution 41.7 ns, read overhead ~0 ns
+workload: 2100000 ops (100000 warmup + 2000000 measured), seed 42
+
+engine=final label=final-2026-10-28/final-5
+  kind         count     mean_ns      p50      p90      p99    p99.9        max
+  limit      1099220          24       41       42       83      125       7125
+  market      100021          26       41       42       83      125       5392
+  cancel      600984          24       41       42       42       84      13333
+  modify      199775          30       41       42       84      125      16184
+  ALL        2000000          25       41       42       83      125      16184
+
+throughput, timed pass:   29617527 ops/s (0.07 s wall for 2000000 ops)
+throughput, untimed pass: 68035215 ops/s (0.03 s wall, same ops, fresh book)
+heap allocations in measured region: 0 (0.000 per op)
+resting orders at end: 60225
+csv appended: /dev/null
+json written: results/final-2026-10-28/final-5.json

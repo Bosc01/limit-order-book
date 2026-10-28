@@ -12,21 +12,22 @@ Final engine (`include/lob/`) on an Apple M5, one thread, median of five runs
 of 2M operations (seed 42: 45% passive limit, 10% crossing limit, 5% market,
 30% cancel, 10% modify):
 
-<!-- BEGIN generated: headline final-2026-10-27 final -->
+<!-- BEGIN generated: headline final-2026-10-28 final -->
 | metric | value |
 |---|---|
-| throughput | 51.0M ops/s |
-| throughput with a timestamp around every op | 22.1M ops/s |
-| mean latency | 33.4 ns |
-| p50 / p99 / p99.9 | 42 / 84 / 208 ns |
+| throughput | 67.6M ops/s |
+| throughput with a timestamp around every op | 29.4M ops/s |
+| mean latency | 24.9 ns |
+| p50 / p99 / p99.9 | 41 / 83 / 125 ns |
 | heap allocations in the measured region | zero in 5 of 5 runs |
 <!-- END generated -->
 
 Throughput comes from a pass with no timestamps. Latency comes from a second
 pass over the same operations that reads the system counter around each one.
 Each read sits behind an `isb`, which serializes the pipeline, so that pass
-runs at less than half the rate. The p50 is the counter's 42 ns step. Method,
-machine conditions, and every run: [docs/benchmarks.md](docs/benchmarks.md).
+runs at less than half the rate. The p50 is one step of the counter, which
+advances every 41.7 ns. Method, machine conditions, and every run:
+[docs/benchmarks.md](docs/benchmarks.md).
 
 ## Design
 
@@ -125,34 +126,34 @@ touch a sweep may go. The remainder is discarded.
 
 `naive` (`std::map` of `std::list`, cancel by linear search) is the
 reference the other engines are tested against. Each `v_n` changes one
-thing. Five interleaved runs per engine of 200k operations, fewer than the
-headline because `naive` slows as its book grows
-(`results/progression-2026-10-27/`):
+thing. Five interleaved runs per engine of 200k operations after a 10k
+warmup, fewer than the headline because `naive` slows as its book grows
+(`results/progression-2026-10-28/`):
 
-<!-- BEGIN generated: progression progression-2026-10-27 -->
+<!-- BEGIN generated: progression progression-2026-10-28 -->
 | engine | change | untimed Mops/s | against previous | timed Mops/s | mean ns | p50 | p90 | p99 | p99.9 | allocs per op |
 |---|---|---|---|---|---|---|---|---|---|---|
-| naive | std::map + std::list, O(n) cancel | 0.12 (0.11 to 0.13) |  | 0.13 | 7908.5 | 83 | 27517 | 60035 | 83845 | 0.401 |
-| v1 | map ladder, intrusive list, hash index | 20.8 (20.5 to 21.9) | +17077% | 14.1 | 59.8 | 42 | 84 | 167 | 292 | 0.796 |
-| v2 | + slab pool for orders | 25.9 (23.5 to 27.8) | +25% | 16.3 | 50.3 | 42 | 84 | 125 | 209 | 0.401 |
-| v3 | + cache-line Order layout | 26.1 (25.7 to 26.4) | +1%, ranges overlap | 16.3 | 50.3 | 42 | 84 | 125 | 209 | 0.401 |
-| v4 | + branch discipline in the match loop | 26.5 (25.5 to 28.3) | +2%, ranges overlap | 16.4 | 49.8 | 42 | 84 | 125 | 209 | 0.401 |
-| v5 | + flat banded ladder with bitmap | 29.7 (20.6 to 29.8) | +12%, ranges overlap | 17.5 | 46.1 | 42 | 83 | 125 | 250 | 0.395 |
-| final | + open-addressing id map, Fibonacci hash | 63.9 (55.6 to 64.6) | +115% | 21.0 | 36.4 | 41 | 83 | 125 | 209 | 0.000 |
+| naive | std::map + std::list, O(n) cancel | 0.15 (0.15 to 0.15) |  | 0.15 | 6571.7 | 42 | 22643 | 48577 | 60201 | 0.401 |
+| v1 | map ladder, intrusive list, hash index | 25.6 (25.4 to 25.7) | +16888% | 17.2 | 49.0 | 42 | 84 | 125 | 208 | 0.796 |
+| v2 | + slab pool for orders | 32.2 (31.8 to 32.6) | +26% | 20.1 | 40.7 | 42 | 83 | 125 | 167 | 0.401 |
+| v3 | + Order aligned to 64 bytes | 32.2 (31.7 to 32.4) | -0%, ranges overlap | 20.2 | 40.5 | 42 | 83 | 125 | 167 | 0.401 |
+| v4 | + branch layout in the match loop | 32.8 (32.2 to 33.1) | +2%, ranges overlap | 20.1 | 40.5 | 42 | 83 | 125 | 167 | 0.401 |
+| v5 | + flat banded ladder with bitmap | 37.3 (36.7 to 37.6) | +13% | 22.0 | 36.4 | 42 | 42 | 84 | 167 | 0.395 |
+| final | + open-addressing id map, Fibonacci hash | 78.2 (77.2 to 79.0) | +110% | 30.7 | 23.6 | 41 | 42 | 83 | 125 | 0.000 |
 <!-- END generated -->
 
 A step is called faster only when every one of its runs beats every run of
 the previous engine; "ranges overlap" marks the others.
 
-* v1: in `naive`, cancel and modify average 19 and 22 us because they search
-  the book. The id index brings both to about 40 and 50 ns.
+* v1: in `naive`, cancel and modify average 16 and 18 us because they search
+  the book. The id index brings them to 32 and 42 ns.
 * v2: the pool beat v1 in every run.
 * v3 (64-byte aligned `Order`) and v4 (branch layout in the match loop): no
   measurable change, most likely because the working set fits in cache and
   the branches are well predicted. Both are kept because they cost nothing.
-* v5: the flat ladder raised the median 12%, but one slow run overlaps v4.
-* final: the open-addressing id map more than doubles v5 and removes the
-  last allocations. v1 to v5 still allocate a node for every
+* v5: the flat ladder beat v4 in every run, 13% at the median.
+* final: the open-addressing id map more than doubles v5 (+110%) and
+  removes the last allocations. v1 to v5 still allocate a node for every
   `std::unordered_map` insert.
 * Timed and untimed throughput diverge as the engines get faster. The
   counter reads cost about the same per operation in every engine, so they
@@ -160,7 +161,7 @@ the previous engine; "ranges overlap" marks the others.
 
 ## Verification
 
-424 GoogleTest cases; 98.2% line and 99.2% function coverage over the
+425 GoogleTest cases; 98.2% line and 99.2% function coverage over the
 engines and the wire protocol (llvm-cov).
 
 * One typed suite runs against all seven engines. `naive` is the
@@ -184,7 +185,8 @@ engines and the wire protocol (llvm-cov).
 * The suite passes under UBSan in CI and under ASan with UBSan locally.
 * The frame decoders reject truncated bodies, trailing bytes, and bad enums.
   The stream reassembler is fed valid streams in every chunk size from one
-  byte up, and random garbage.
+  byte up, 2000 random-length frames in random chunk sizes, and random
+  garbage.
 * `scripts/net_smoke.sh` runs the gateway, a UDP subscriber, and a
   1000-order burst, and checks that every order is acknowledged and the feed
   has no sequence gaps.
@@ -218,7 +220,7 @@ exec report:
 
 * macOS loopback, one client, 20k synchronous orders, load average 8.1:
   p50 31.5 us, p99 58.4 us, p99.9 90.5 us (`results/wire_2026-10-22.txt`).
-  The engine's mean is 33 ns, so nearly all of that is outside the engine.
+  The engine's mean is 25 ns, so nearly all of that is outside the engine.
 * Linux VM on the same machine, 1 to 128 closed-loop clients
   (`results/gateway_load.md`): throughput levels off near 50k orders/s from
   8 clients up while round trips grow with the client count, so the gateway
@@ -235,7 +237,7 @@ unless a copy is in `third_party/`.
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 
-./build/lob_tests                            # 424 tests
+./build/lob_tests                            # 425 tests
 ./build/bench final                          # one run of the final engine
 ./build/bench naive                          # the reference engine
 ./scripts/bench_report.sh mine final=build   # five runs saved under results/mine/

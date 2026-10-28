@@ -1,0 +1,2 @@
+before The engine before Fibonacci hashing (splitmix64 finalizer).
+after Fibonacci hashing in the id map, re-run on AC power with RStudio paused.

@@ -1,0 +1,1 @@
+final The engine at this commit. AC power, RStudio's session paused, the Bluetooth daemon still holding a core.

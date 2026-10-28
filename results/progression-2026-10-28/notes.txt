@@ -1,0 +1,7 @@
+naive std::map + std::list, O(n) cancel
+v1 map ladder, intrusive list, hash index
+v2 + slab pool for orders
+v3 + Order aligned to 64 bytes
+v4 + branch layout in the match loop
+v5 + flat banded ladder with bitmap
+final + open-addressing id map, Fibonacci hash

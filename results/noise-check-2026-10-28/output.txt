@@ -1,0 +1,230 @@
+===== a run 1: bench final --ops 2000000 --warmup 100000 =====
+ -InternalBattery-0 (id=34996323)	45%; charging; 2:39 remaining present: true
+machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), Release, optimized
+flags: -std=c++20 -O3 -DNDEBUG -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic
+load average at start: 4.97 4.11 3.72
+clock: 1.0000 ns per counter unit, resolution 41.7 ns, read overhead ~0 ns
+workload: 2100000 ops (100000 warmup + 2000000 measured), seed 42
+
+engine=final label=noise-check-2026-10-28/a-1
+  kind         count     mean_ns      p50      p90      p99    p99.9        max
+  limit      1099220          24       41       42       83      125      12958
+  market      100021          26       41       42       83       84        916
+  cancel      600984          24       41       42       42       84      14416
+  modify      199775          29       41       42       84      125       8542
+  ALL        2000000          24       41       42       83      125      14416
+
+throughput, timed pass:   30131903 ops/s (0.07 s wall for 2000000 ops)
+throughput, untimed pass: 68074581 ops/s (0.03 s wall, same ops, fresh book)
+heap allocations in measured region: 0 (0.000 per op)
+resting orders at end: 60225
+csv appended: /dev/null
+json written: results/noise-check-2026-10-28/a-1.json
+===== b run 1: bench final --ops 2000000 --warmup 100000 =====
+ -InternalBattery-0 (id=34996323)	45%; charging; 2:39 remaining present: true
+machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), Release, optimized
+flags: -std=c++20 -O3 -DNDEBUG -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic
+load average at start: 4.97 4.11 3.72
+clock: 1.0000 ns per counter unit, resolution 41.7 ns, read overhead ~0 ns
+workload: 2100000 ops (100000 warmup + 2000000 measured), seed 42
+
+engine=final label=noise-check-2026-10-28/b-1
+  kind         count     mean_ns      p50      p90      p99    p99.9        max
+  limit      1099220          24       41       42       83      166      14976
+  market      100021          26       41       42       83      125      13475
+  cancel      600984          24       41       42       42       84       9500
+  modify      199775          30       41       42       84      125      10083
+  ALL        2000000          25       41       42       83      125      14976
+
+throughput, timed pass:   29586547 ops/s (0.07 s wall for 2000000 ops)
+throughput, untimed pass: 68241918 ops/s (0.03 s wall, same ops, fresh book)
+heap allocations in measured region: 0 (0.000 per op)
+resting orders at end: 60225
+csv appended: /dev/null
+json written: results/noise-check-2026-10-28/b-1.json
+===== b run 2: bench final --ops 2000000 --warmup 100000 =====
+ -InternalBattery-0 (id=34996323)	45%; charging; 2:39 remaining present: true
+machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), Release, optimized
+flags: -std=c++20 -O3 -DNDEBUG -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic
+load average at start: 4.97 4.11 3.72
+clock: 1.0000 ns per counter unit, resolution 41.7 ns, read overhead ~0 ns
+workload: 2100000 ops (100000 warmup + 2000000 measured), seed 42
+
+engine=final label=noise-check-2026-10-28/b-2
+  kind         count     mean_ns      p50      p90      p99    p99.9        max
+  limit      1099220          25       41       42       84      166      15643
+  market      100021          27       41       42       83      125       8101
+  cancel      600984          24       41       42       42      125      13417
+  modify      199775          30       41       42       84      125      15185
+  ALL        2000000          25       41       42       83      125      15643
+
+throughput, timed pass:   29151898 ops/s (0.07 s wall for 2000000 ops)
+throughput, untimed pass: 67595542 ops/s (0.03 s wall, same ops, fresh book)
+heap allocations in measured region: 0 (0.000 per op)
+resting orders at end: 60225
+csv appended: /dev/null
+json written: results/noise-check-2026-10-28/b-2.json
+===== a run 2: bench final --ops 2000000 --warmup 100000 =====
+ -InternalBattery-0 (id=34996323)	45%; charging; 2:39 remaining present: true
+machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), Release, optimized
+flags: -std=c++20 -O3 -DNDEBUG -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic
+load average at start: 4.97 4.11 3.72
+clock: 1.0000 ns per counter unit, resolution 41.7 ns, read overhead ~0 ns
+workload: 2100000 ops (100000 warmup + 2000000 measured), seed 42
+
+engine=final label=noise-check-2026-10-28/a-2
+  kind         count     mean_ns      p50      p90      p99    p99.9        max
+  limit      1099220          24       41       42       83      125      14225
+  market      100021          26       41       42       83      125      12000
+  cancel      600984          24       41       42       42       84       8292
+  modify      199775          30       41       42       84      125       5958
+  ALL        2000000          25       41       42       83      125      14225
+
+throughput, timed pass:   29532228 ops/s (0.07 s wall for 2000000 ops)
+throughput, untimed pass: 66955506 ops/s (0.03 s wall, same ops, fresh book)
+heap allocations in measured region: 0 (0.000 per op)
+resting orders at end: 60225
+csv appended: /dev/null
+json written: results/noise-check-2026-10-28/a-2.json
+===== a run 3: bench final --ops 2000000 --warmup 100000 =====
+ -InternalBattery-0 (id=34996323)	45%; charging; 2:39 remaining present: true
+machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), Release, optimized
+flags: -std=c++20 -O3 -DNDEBUG -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic
+load average at start: 4.97 4.11 3.72
+clock: 1.0000 ns per counter unit, resolution 41.7 ns, read overhead ~0 ns
+workload: 2100000 ops (100000 warmup + 2000000 measured), seed 42
+
+engine=final label=noise-check-2026-10-28/a-3
+  kind         count     mean_ns      p50      p90      p99    p99.9        max
+  limit      1099220          24       41       42       83      125      17791
+  market      100021          26       41       42       83      125       1167
+  cancel      600984          24       41       42       42       84       1584
+  modify      199775          30       41       42       84      125       5292
+  ALL        2000000          25       41       42       83      125      17791
+
+throughput, timed pass:   29527268 ops/s (0.07 s wall for 2000000 ops)
+throughput, untimed pass: 67559294 ops/s (0.03 s wall, same ops, fresh book)
+heap allocations in measured region: 0 (0.000 per op)
+resting orders at end: 60225
+csv appended: /dev/null
+json written: results/noise-check-2026-10-28/a-3.json
+===== b run 3: bench final --ops 2000000 --warmup 100000 =====
+ -InternalBattery-0 (id=34996323)	45%; charging; 2:39 remaining present: true
+machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), Release, optimized
+flags: -std=c++20 -O3 -DNDEBUG -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic
+load average at start: 4.97 4.11 3.72
+clock: 1.0000 ns per counter unit, resolution 41.7 ns, read overhead ~0 ns
+workload: 2100000 ops (100000 warmup + 2000000 measured), seed 42
+
+engine=final label=noise-check-2026-10-28/b-3
+  kind         count     mean_ns      p50      p90      p99    p99.9        max
+  limit      1099220          26       41       42       84      542      15000
+  market      100021          27       41       42       83      500       4500
+  cancel      600984          25       41       42       42      458      38018
+  modify      199775          31       41       42       84      417      12500
+  ALL        2000000          26       41       42       83      500      38018
+
+throughput, timed pass:   28442304 ops/s (0.07 s wall for 2000000 ops)
+throughput, untimed pass: 67240545 ops/s (0.03 s wall, same ops, fresh book)
+heap allocations in measured region: 0 (0.000 per op)
+resting orders at end: 60225
+csv appended: /dev/null
+json written: results/noise-check-2026-10-28/b-3.json
+===== b run 4: bench final --ops 2000000 --warmup 100000 =====
+ -InternalBattery-0 (id=34996323)	45%; charging; 2:39 remaining present: true
+machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), Release, optimized
+flags: -std=c++20 -O3 -DNDEBUG -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic
+load average at start: 4.97 4.11 3.72
+clock: 1.0000 ns per counter unit, resolution 41.7 ns, read overhead ~0 ns
+workload: 2100000 ops (100000 warmup + 2000000 measured), seed 42
+
+engine=final label=noise-check-2026-10-28/b-4
+  kind         count     mean_ns      p50      p90      p99    p99.9        max
+  limit      1099220          24       41       42       83      125      13559
+  market      100021          26       41       42       83      125        875
+  cancel      600984          24       41       42       42       84      16268
+  modify      199775          30       41       42       84      125       2000
+  ALL        2000000          25       41       42       83      125      16268
+
+throughput, timed pass:   29636819 ops/s (0.07 s wall for 2000000 ops)
+throughput, untimed pass: 67653563 ops/s (0.03 s wall, same ops, fresh book)
+heap allocations in measured region: 0 (0.000 per op)
+resting orders at end: 60225
+csv appended: /dev/null
+json written: results/noise-check-2026-10-28/b-4.json
+===== a run 4: bench final --ops 2000000 --warmup 100000 =====
+ -InternalBattery-0 (id=34996323)	45%; charging; 2:39 remaining present: true
+machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), Release, optimized
+flags: -std=c++20 -O3 -DNDEBUG -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic
+load average at start: 4.81 4.09 3.72
+clock: 1.0000 ns per counter unit, resolution 41.7 ns, read overhead ~0 ns
+workload: 2100000 ops (100000 warmup + 2000000 measured), seed 42
+
+engine=final label=noise-check-2026-10-28/a-4
+  kind         count     mean_ns      p50      p90      p99    p99.9        max
+  limit      1099220          24       41       42       83      125       4458
+  market      100021          26       41       42       83      125       1083
+  cancel      600984          24       41       42       42       84      16416
+  modify      199775          30       41       42       84      125      14892
+  ALL        2000000          25       41       42       83      125      16416
+
+throughput, timed pass:   29533446 ops/s (0.07 s wall for 2000000 ops)
+throughput, untimed pass: 67979810 ops/s (0.03 s wall, same ops, fresh book)
+heap allocations in measured region: 0 (0.000 per op)
+resting orders at end: 60225
+csv appended: /dev/null
+json written: results/noise-check-2026-10-28/a-4.json
+===== a run 5: bench final --ops 2000000 --warmup 100000 =====
+ -InternalBattery-0 (id=34996323)	45%; charging; 2:39 remaining present: true
+machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), Release, optimized
+flags: -std=c++20 -O3 -DNDEBUG -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic
+load average at start: 4.81 4.09 3.72
+clock: 1.0000 ns per counter unit, resolution 41.7 ns, read overhead ~0 ns
+workload: 2100000 ops (100000 warmup + 2000000 measured), seed 42
+
+engine=final label=noise-check-2026-10-28/a-5
+  kind         count     mean_ns      p50      p90      p99    p99.9        max
+  limit      1099220          24       41       42       83      125      15125
+  market      100021          26       41       42       83      125       1042
+  cancel      600984          24       41       42       42       84      18892
+  modify      199775          30       41       42       84      125        917
+  ALL        2000000          25       41       42       83      125      18892
+
+throughput, timed pass:   29304655 ops/s (0.07 s wall for 2000000 ops)
+throughput, untimed pass: 67558723 ops/s (0.03 s wall, same ops, fresh book)
+heap allocations in measured region: 0 (0.000 per op)
+resting orders at end: 60225
+csv appended: /dev/null
+json written: results/noise-check-2026-10-28/a-5.json
+===== b run 5: bench final --ops 2000000 --warmup 100000 =====
+ -InternalBattery-0 (id=34996323)	45%; charging; 2:39 remaining present: true
+machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
+build: Apple LLVM 17.0.0 (clang-1700.6.3.2), Release, optimized
+flags: -std=c++20 -O3 -DNDEBUG -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic
+load average at start: 4.81 4.09 3.72
+clock: 1.0000 ns per counter unit, resolution 41.7 ns, read overhead ~0 ns
+workload: 2100000 ops (100000 warmup + 2000000 measured), seed 42
+
+engine=final label=noise-check-2026-10-28/b-5
+  kind         count     mean_ns      p50      p90      p99    p99.9        max
+  limit      1099220          25       41       42       83      125      12167
+  market      100021          27       41       42       83      125       1166
+  cancel      600984          24       41       42       42      125       8726
+  modify      199775          30       41       42       84      125       7916
+  ALL        2000000          25       41       42       83      125      12167
+
+throughput, timed pass:   29066793 ops/s (0.07 s wall for 2000000 ops)
+throughput, untimed pass: 67895385 ops/s (0.03 s wall, same ops, fresh book)
+heap allocations in measured region: 0 (0.000 per op)
+resting orders at end: 60225
+csv appended: /dev/null
+json written: results/noise-check-2026-10-28/b-5.json

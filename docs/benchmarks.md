@@ -39,33 +39,39 @@ python3 scripts/results.py readme
 
 ## Conditions
 
-Every batch dated 2026-10-27 ran on battery power, per the system power log,
-and batches after commit c662000 log the battery line before each run in
-their `output.txt`. The Bluetooth daemon and an RStudio session each held a
-core near 100% throughout. Under these conditions the same final build
-measured 57.8M ops/s in one batch (`results/try-fibonacci-hash-run3/`) and
-51.0M in another, minutes apart. Absolute figures move by about 15% between
-batches, which is why a change is only judged inside one interleaved batch.
+The README's figures come from batches dated 2026-10-28, run on AC power
+with an RStudio session, which otherwise held one core at 100%, paused
+(SIGSTOP) for their duration. The Bluetooth daemon still held one core near
+100%. Under those conditions one build run against itself
+(`results/noise-check-2026-10-28/`) differed by 0.1% at the median, and each
+build's five runs spanned about 1.6%.
+
+Batches dated 2026-10-27, which include every attempt batch below, ran on
+battery with both processes busy, per the power line each run logs in its
+`output.txt`. There the same final build measured 57.8M ops/s in one batch
+(`results/try-fibonacci-hash-run3/`) and 51.0M in another, minutes apart.
+Absolute figures move that much between batches, which is why a change is
+only judged inside one interleaved batch.
 
 ## Final engine by operation
 
-<!-- BEGIN generated: operations final-2026-10-27 final -->
+<!-- BEGIN generated: operations final-2026-10-28 final -->
 ```
 machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
 build: Apple LLVM 17.0.0 (clang-1700.6.3.2), Release
-flags: -std=c++20 -O3 -DNDEBUG -O3 -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic
-timer resolution: 42.7 ns
+flags: -std=c++20 -O3 -DNDEBUG -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic
+timer resolution: 41.7 ns
 ```
 
 | operation | mean ns | p50 | p99 | p99.9 |
 |---|---|---|---|---|
-| all | 33.4 | 42 | 84 | 208 |
-| limit | 32.9 | 41 | 125 | 209 |
-| market | 35.1 | 42 | 84 | 167 |
-| cancel | 32.0 | 41 | 84 | 125 |
-| modify | 39.6 | 42 | 125 | 167 |
+| all | 24.9 | 41 | 83 | 125 |
+| limit | 24.3 | 41 | 83 | 125 |
+| market | 26.4 | 41 | 83 | 125 |
+| cancel | 24.1 | 41 | 42 | 84 |
+| modify | 30.1 | 41 | 84 | 125 |
 
-Throughput, untimed pass: median 51.0M ops/s, runs from 47.6M to 53.2M. With a timestamp around every op: median 22.1M, runs from 19.9M to 23.6M. Load average at the start of each run: 3.76 to 3.83. Every run is in `results/final-2026-10-27/`, built from commit `eefb3a6`.
+Throughput, untimed pass: median 67.6M ops/s, runs from 66.3M to 68.0M. With a timestamp around every op: median 29.4M, runs from 28.6M to 29.6M. Load average at the start of each run: 4.81 to 4.81. Every run is in `results/final-2026-10-28/`, built from commit `78d4f36`.
 <!-- END generated -->
 
 In a profile of the timed pass, 61.7% of samples land on the two counter
@@ -117,8 +123,11 @@ stay in the table.
   after those came back; before that the plan was to re-run once.
 * Fibonacci hashing is kept. In its valid batch every changed run beat every
   unchanged run: +16.5% at the median, and mean latency from 32.5 to 27.7 ns.
-  The batch does not separate the two candidate causes, the shorter
-  dependency chain in front of each probe's load or fewer collisions from
+  The same pair of commits re-run on 2026-10-28 under the quieter conditions
+  (`results/try-fibonacci-hash-2026-10-28/`) gave 55.4M to 67.8M ops/s,
+  +22.6%, again with every changed run faster, and mean latency from 27.5 to
+  23.9 ns. Neither batch separates the two candidate causes: the shorter
+  dependency chain in front of each probe's load, or fewer collisions from
   the more even spacing it gives sequential ids.
 * Single-probe cancel stays reverted: +0.6% in its valid batch, inside the
   noise. The second walk it removed was most likely in L1 already, and its
