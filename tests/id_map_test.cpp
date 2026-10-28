@@ -67,7 +67,7 @@ TEST(IdMap, DifferentialVsUnorderedMap200k) {
             auto* p  = m.find(k);
             auto  it = ref.find(k);
             ASSERT_EQ(p != nullptr, it != ref.end()) << "step " << i;
-            if (p) EXPECT_EQ(*p, it->second) << "step " << i;
+            if (p) { EXPECT_EQ(*p, it->second) << "step " << i; }
         }
         ASSERT_EQ(m.size(), ref.size()) << "step " << i;
     }

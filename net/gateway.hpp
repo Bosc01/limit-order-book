@@ -202,7 +202,7 @@ inline void queue_send(Connection& c, const std::uint8_t* p, std::size_t n) {
 
 inline void send_exec(Connection& c, lob::OrderId id, lob::Qty filled,
                       lobnet::ExecStatus st) {
-    std::uint8_t buf[64];
+    std::uint8_t buf[64]{};
     const auto n = lobnet::encode(buf, sizeof(buf),
                                   lobnet::ExecReportMsg{id, filled, st});
     if (n) queue_send(c, buf, n);

@@ -355,8 +355,9 @@ TYPED_TEST(EngineTest, MixedFlowKeepsInvariants) {
         const char* err = b.check_invariants();
         EXPECT_EQ(err, nullptr) << "step " << step << " (" << what << "): " << err;
         ++step;
-        if (b.best_bid() != kNoPrice && b.best_ask() != kNoPrice)
+        if (b.best_bid() != kNoPrice && b.best_ask() != kNoPrice) {
             EXPECT_LT(b.best_bid(), b.best_ask());
+        }
     };
     b.submit_limit(1, Side::Bid, 100, 50);          ok("bid rests");
     b.submit_limit(2, Side::Ask, 102, 30);          ok("ask rests");

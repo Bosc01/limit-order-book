@@ -125,10 +125,11 @@ void step(Book& b, Model& m, Coverage& cov, const Op& op, Stp stp) {
     switch (op.kind) {
     case Op::Limit: {
         const auto r = b.submit_limit(op.id, op.side, op.px, op.qty, op.tif, op.owner);
-        if (op.qty == 0 || !in_band(op.px)) ASSERT_TRUE(r.rejected);
-        if (r.rested) ASSERT_EQ(op.tif, Tif::GTC) << "IOC or FOK remainder rested";
-        if (op.tif == Tif::FOK)
+        if (op.qty == 0 || !in_band(op.px)) { ASSERT_TRUE(r.rejected); }
+        if (r.rested) { ASSERT_EQ(op.tif, Tif::GTC) << "IOC or FOK remainder rested"; }
+        if (op.tif == Tif::FOK) {
             ASSERT_TRUE(r.filled == 0 || r.filled == op.qty) << "FOK partially filled";
+        }
         filled = r.filled;
         rested = r.rested;
         break;
@@ -191,8 +192,9 @@ void step(Book& b, Model& m, Coverage& cov, const Op& op, Stp stp) {
         ASSERT_NE(maker.side, taker_side) << "maker on the taker's own side";
         ASSERT_EQ(t.px, maker.px) << "trade not at the resting order's price";
         ASSERT_LE(t.qty, maker.qty);
-        if (stp != Stp::None && taker_owner != 0)
+        if (stp != Stp::None && taker_owner != 0) {
             ASSERT_NE(maker.owner, taker_owner) << "self-trade with STP armed";
+        }
         tape_qty += t.qty;
         m.traded += t.qty;
         maker.qty -= t.qty;
@@ -224,8 +226,9 @@ void audit(const Book& b, const Model& m) {
     }
     ASSERT_EQ(b.best_bid(), best_bid);
     ASSERT_EQ(b.best_ask(), best_ask);
-    if (b.best_bid() != kNoPrice && b.best_ask() != kNoPrice)
+    if (b.best_bid() != kNoPrice && b.best_ask() != kNoPrice) {
         ASSERT_LT(b.best_bid(), b.best_ask()) << "book is crossed or locked";
+    }
 
     std::uint64_t on_book = 0;
     for (Price px = kBandLo; px < kBandHi; ++px)
@@ -300,7 +303,7 @@ TEST_P(Property, NeverCrossedAndQuantityConserved) {
     EXPECT_GT(cov.trades, 0u);
     EXPECT_GT(cov.live_cancels, 0u);
     EXPECT_GT(cov.live_modifies, 0u);
-    if (GetParam() == Stp::CancelResting) EXPECT_GT(cov.stp_kills, 0u);
+    if (GetParam() == Stp::CancelResting) { EXPECT_GT(cov.stp_kills, 0u); }
 }
 
 TEST_P(Property, SameInputSameTrades) {
