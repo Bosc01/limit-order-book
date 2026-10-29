@@ -43,7 +43,9 @@ The README headline comes from `results/final-quiet-2026-10-28/`, made by
 `scripts/quiet_baseline.sh`: five runs a minute apart, on AC power, each
 with CPU idle and the load average recorded before it. It started at 92.8%
 idle; the last run started at 83.5%, below the 90% the script requires
-only at the start.
+only at the start. That run measured 68.93M ops/s untimed and 30.51M timed;
+the other four measured 68.74M to 69.50M untimed and 29.49M to 30.44M timed,
+so the low reading left it at the median untimed and the highest timed.
 
 The README's other figures come from batches dated 2026-10-28, run on AC power
 with an RStudio session, which otherwise held one core at 100%, paused
@@ -61,23 +63,23 @@ only judged inside one interleaved batch.
 
 ## Final engine by operation
 
-<!-- BEGIN generated: operations final-2026-10-28 final -->
+<!-- BEGIN generated: operations final-quiet-2026-10-28 final -->
 ```
 machine: Apple M5, 10 logical cores (4 performance, 6 efficiency), Darwin 25.6.0 arm64
 build: Apple LLVM 17.0.0 (clang-1700.6.3.2), Release
 flags: -std=c++20 -O3 -DNDEBUG -fno-exceptions -fno-rtti -g -Wall -Wextra -Wpedantic
-timer resolution: 41.7 ns
+timer resolution: 41.6 ns
 ```
 
 | operation | mean ns | p50 | p99 | p99.9 |
 |---|---|---|---|---|
-| all | 24.9 | 41 | 83 | 125 |
-| limit | 24.3 | 41 | 83 | 125 |
-| market | 26.4 | 41 | 83 | 125 |
-| cancel | 24.1 | 41 | 42 | 84 |
-| modify | 30.1 | 41 | 84 | 125 |
+| all | 24.1 | 41 | 83 | 125 |
+| limit | 23.5 | 41 | 83 | 125 |
+| market | 25.5 | 41 | 83 | 84 |
+| cancel | 23.3 | 41 | 42 | 84 |
+| modify | 29.0 | 41 | 84 | 125 |
 
-Throughput, untimed pass: median 67.6M ops/s, runs from 66.2M to 68.0M. With a timestamp around every op: median 29.3M, runs from 28.5M to 29.6M. Load average at the start of each run: 4.81. Every run is in `results/final-2026-10-28/`, built from commit `78d4f36`.
+Throughput, untimed pass: median 68.9M ops/s, runs from 68.7M to 69.5M. With a timestamp around every op: median 30.2M, runs from 29.4M to 30.5M. Load average at the start of each run: 1.82 to 2.22. Every run is in `results/final-quiet-2026-10-28/`, built from commit `fa1b053`.
 <!-- END generated -->
 
 In a profile of the timed pass, 61.7% of samples land on the two counter
