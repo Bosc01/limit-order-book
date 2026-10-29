@@ -100,9 +100,6 @@ struct Resting {
 
 struct Model {
     std::unordered_map<OrderId, Resting> orders;
-    std::uint64_t entered = 0; // quantity that came to rest
-    std::uint64_t traded  = 0; // resting quantity consumed by fills
-    std::uint64_t removed = 0; // canceled, killed by STP, or replaced by modify
 };
 
 // Proof that the random sequences exercised what the properties are about.
@@ -112,6 +109,12 @@ struct Coverage {
 
 // Apply one operation to the engine and the model, checking the engine's
 // answers along the way.
+//
+// Each order's quantity is accounted for against the input, not against
+// what the engine says about itself: op.qty must split into the reported
+// fill, the quantity that appeared on the engine's book at the order's
+// price, and a discarded remainder the test works out from the order type.
+// A cancel or modify must take exactly the model's quantity off the book.
 void step(Book& b, Model& m, Coverage& cov, const Op& op, Stp stp) {
     auto& tape = b.listener();
     tape.trades.clear();
@@ -121,28 +124,40 @@ void step(Book& b, Model& m, Coverage& cov, const Op& op, Stp stp) {
     Owner taker_owner = op.owner;
     Qty   filled = 0;
     bool  rested = false;
+    bool  gtc    = false; // the remainder rests unless STP stops the order
+    bool  arrives = true; // false for a rejected order: nothing may happen
+    // Depth at the taker's own price before the call, minus the order itself
+    // when a modify leaves it at that price.
+    std::uint64_t before = 0;
 
     switch (op.kind) {
     case Op::Limit: {
+        before = b.qty_at(op.side, op.px);
         const auto r = b.submit_limit(op.id, op.side, op.px, op.qty, op.tif, op.owner);
-        if (op.qty == 0 || !in_band(op.px)) { ASSERT_TRUE(r.rejected); }
+        arrives = op.qty > 0 && in_band(op.px);
+        if (!arrives) { ASSERT_TRUE(r.rejected); }
+        if (r.rejected) { ASSERT_EQ(r.filled, 0u); }
         if (r.rested) { ASSERT_EQ(op.tif, Tif::GTC) << "IOC or FOK remainder rested"; }
         if (op.tif == Tif::FOK) {
             ASSERT_TRUE(r.filled == 0 || r.filled == op.qty) << "FOK partially filled";
         }
         filled = r.filled;
         rested = r.rested;
+        gtc    = op.tif == Tif::GTC;
         break;
     }
     case Op::Market:
         filled = b.submit_market(op.id, op.side, op.qty, op.owner);
+        arrives = op.qty > 0;
         break;
     case Op::Cancel: {
         const auto it   = m.orders.find(op.id);
         const bool live = it != m.orders.end();
+        const std::uint64_t at = live ? b.qty_at(it->second.side, it->second.px) : 0;
         ASSERT_EQ(b.cancel(op.id), live);
         if (live) {
-            m.removed += it->second.qty;
+            ASSERT_EQ(at - b.qty_at(it->second.side, it->second.px), it->second.qty)
+                << "cancel took the wrong quantity off the book";
             m.orders.erase(it);
             ++cov.live_cancels;
         }
@@ -152,24 +167,46 @@ void step(Book& b, Model& m, Coverage& cov, const Op& op, Stp stp) {
     case Op::Modify: {
         const auto it   = m.orders.find(op.id);
         const bool live = it != m.orders.end();
-        const auto r    = b.modify(op.id, op.px, op.qty);
+        const Resting old = live ? it->second : Resting{};
+        std::uint64_t at_old = 0;
+        if (live) {
+            at_old = b.qty_at(old.side, old.px);
+            before = b.qty_at(old.side, op.px) - (old.px == op.px ? old.qty : 0);
+        }
+        const auto r = b.modify(op.id, op.px, op.qty);
         ASSERT_EQ(r.found, live);
         ASSERT_EQ(r.ok, live && op.qty > 0 && in_band(op.px));
         if (!r.ok) {
             ASSERT_TRUE(tape.trades.empty() && tape.cancels.empty());
             return;
         }
+        if (old.px != op.px) {
+            ASSERT_EQ(at_old - b.qty_at(old.side, old.px), old.qty)
+                << "modify took the wrong quantity off the old price";
+        }
         // The order leaves at its old size and, if it rests, re-enters at
         // the new one; an in-place size-down nets out the same way.
-        taker_side  = it->second.side;
-        taker_owner = it->second.owner;
-        m.removed += it->second.qty;
+        taker_side  = old.side;
+        taker_owner = old.owner;
         m.orders.erase(it);
         ++cov.live_modifies;
         filled = r.filled;
         rested = r.rested;
+        gtc    = true;
         break;
     }
+    }
+
+    // RejectIncoming may stop a GTC order at its own resting order and
+    // discard the remainder. The model says whether such an order is in
+    // reach; which comes first in priority it cannot say, so then the test
+    // accepts either a full split or a discarded remainder.
+    bool stop_possible = false;
+    if (gtc && stp == Stp::RejectIncoming && taker_owner != 0) {
+        for (const auto& [id, o] : m.orders) {
+            const bool crosses = taker_side == Side::Bid ? o.px <= op.px : o.px >= op.px;
+            if (o.side != taker_side && o.owner == taker_owner && crosses) stop_possible = true;
+        }
     }
 
     for (const auto& c : tape.cancels) {
@@ -178,7 +215,6 @@ void step(Book& b, Model& m, Coverage& cov, const Op& op, Stp stp) {
         ASSERT_EQ(stp, Stp::CancelResting);
         ASSERT_NE(taker_owner, 0u) << "owner 0 must be exempt from STP";
         ASSERT_EQ(it->second.owner, taker_owner);
-        m.removed += it->second.qty;
         m.orders.erase(it);
         ++cov.stp_kills;
     }
@@ -196,7 +232,6 @@ void step(Book& b, Model& m, Coverage& cov, const Op& op, Stp stp) {
             ASSERT_NE(maker.owner, taker_owner) << "self-trade with STP armed";
         }
         tape_qty += t.qty;
-        m.traded += t.qty;
         maker.qty -= t.qty;
         if (maker.qty == 0) m.orders.erase(it);
         ++cov.trades;
@@ -204,16 +239,33 @@ void step(Book& b, Model& m, Coverage& cov, const Op& op, Stp stp) {
     // What the engine says was filled is exactly what the tape says traded.
     ASSERT_EQ(tape_qty, filled);
 
+    // Quantity in: op.qty = filled + rested + discarded. Rested is measured
+    // on the book at the order's price; discarded follows from the type: all
+    // of a rejected order, the remainder of an IOC, FOK or market order, and
+    // nothing of a GTC order unless STP stopped it.
+    if (!arrives) { ASSERT_EQ(filled, 0u); }
+    const std::uint64_t on_book =
+        op.kind == Op::Market || !in_band(op.px) ? 0 : b.qty_at(taker_side, op.px) - before;
+    ASSERT_EQ(rested, on_book > 0) << "rested flag disagrees with the book";
+    if (!gtc || !arrives) {
+        ASSERT_EQ(on_book, 0u) << "a non-GTC or rejected order left quantity on the book";
+    } else if (stop_possible) {
+        ASSERT_TRUE(filled + on_book == op.qty || on_book == 0)
+            << "GTC order neither rested its remainder nor was stopped";
+    } else {
+        ASSERT_EQ(filled + on_book, std::uint64_t(op.qty))
+            << "GTC quantity not accounted for: filled " << filled << ", on book " << on_book;
+    }
+
     if (rested) {
         ASSERT_LT(filled, op.qty);
-        m.orders[op.id] = {taker_side, op.px, Qty(op.qty - filled), taker_owner};
-        m.entered += op.qty - filled;
+        m.orders[op.id] = {taker_side, op.px, Qty(on_book), taker_owner};
     }
 }
 
 // After every operation: the structure is sound, the book is not crossed,
 // the cached best prices are right, every price level holds exactly the
-// model's quantity, and the ledger balances.
+// model's quantity.
 void audit(const Book& b, const Model& m) {
     ASSERT_EQ(b.check_invariants(), nullptr);
 
@@ -230,16 +282,16 @@ void audit(const Book& b, const Model& m) {
         ASSERT_LT(b.best_bid(), b.best_ask()) << "book is crossed or locked";
     }
 
-    std::uint64_t on_book = 0;
     for (Price px = kBandLo; px < kBandHi; ++px)
         for (const Side s : {Side::Bid, Side::Ask}) {
             ASSERT_EQ(b.qty_at(s, px), depth[int(s)][px]) << "depth at " << px;
-            on_book += b.qty_at(s, px);
         }
     ASSERT_EQ(b.resting_orders(), m.orders.size());
-    // Conservation: every unit that came to rest is still resting, traded, or
-    // removed. Nothing is created and nothing is lost.
-    ASSERT_EQ(on_book, m.entered - m.traded - m.removed);
+    // No ledger check here. Once every level matches the model, the book's
+    // total equals the model's by construction, so a check of that total
+    // against entered - traded - removed could not fail on its own; it was
+    // removed. Conservation is checked per operation in step(), against
+    // each order's own quantity.
 }
 
 void run_checked(std::uint64_t seed, Stp stp, Coverage& cov) {
