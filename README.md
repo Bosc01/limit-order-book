@@ -203,9 +203,19 @@ not in the test binary; `scripts/net_smoke.sh` exercises it, unmeasured.
 * Property tests: 100,000 seeded random operations per STP policy, checked
   after every operation against a model the test keeps. The book is never
   crossed or locked, cached best prices and per-level quantities match the
-  model, quantity is conserved (everything that rested is still resting,
-  traded, or canceled), and every trade hits a live order at that order's
-  price.
+  model, and every trade takes the earliest live order at its price, at that
+  order's price. Quantity is checked against the input: each order splits
+  into its fill, what appeared on the book, and the remainder its type
+  discards, and a cancel takes exactly the order's quantity off the book.
+* `scripts/mutation_check.sh`, run in CI, rebuilds the property and
+  differential suites against six deliberately broken copies of the final
+  engine, and each is caught. Both suites catch a fill missing from the
+  book, a cancel that leaves the order resting, and two time-priority
+  breaks (matching newest first, resting new orders at the head of their
+  level). Only the property suite catches the two RejectIncoming faults
+  (canceling the resting order instead, resting the remainder after a
+  stop). The differential test does not cover self-trade prevention,
+  because `naive` ignores it, so the property suite is the only check there.
 * Edge cases: TIF and STP combinations, FOK atomicity under both STP modes,
   duplicate and reused ids, band edges, bitmap scans across word boundaries,
   pool growth, and 200k random id-map operations mirrored against
