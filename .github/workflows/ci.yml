@@ -28,6 +28,9 @@ jobs:
         run: ./scripts/net_smoke.sh build
       - name: README tables match the saved runs
         run: python3 scripts/results.py readme --check
+      - name: Property and differential tests catch broken engines
+        if: runner.os == 'Linux'
+        run: ./scripts/mutation_check.sh
 
   ubsan:
     runs-on: ubuntu-24.04
