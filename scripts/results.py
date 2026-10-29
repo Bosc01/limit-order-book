@@ -162,8 +162,18 @@ def headline(batch, name):
         f" / {e.lat('all', 'p999_ns'):.0f} ns |",
         f"| heap allocations in the measured region | zero in {e.allocs_zero()} of "
         f"{len(e.runs)} runs |",
-        f"| 1-minute load average when the runs started | {loads([e])} |",
+        conditions(e),
     ]) + "\n"
+
+
+# Load average, plus CPU idle where quiet_baseline.sh recorded it.
+def conditions(e):
+    idle = [r["pre_run"]["cpu_idle_pct"] for r in e.runs
+            if r.get("pre_run", {}).get("cpu_idle_pct") is not None]
+    if len(idle) < len(e.runs):
+        return f"| 1-minute load average when the runs started | {loads([e])} |"
+    return (f"| before each run: 1-minute load average, CPU idle | {loads([e])}; "
+            f"{down(min(idle), 1)}% to {down(max(idle), 1)}% idle |")
 
 
 def operations(batch, name):

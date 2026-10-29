@@ -39,7 +39,13 @@ python3 scripts/results.py readme
 
 ## Conditions
 
-The README's figures come from batches dated 2026-10-28, run on AC power
+The README headline comes from `results/final-quiet-2026-10-28/`, made by
+`scripts/quiet_baseline.sh`: five runs a minute apart, on AC power, each
+with CPU idle and the load average recorded before it. It started at 92.8%
+idle; the last run started at 83.5%, below the 90% the script requires
+only at the start.
+
+The README's other figures come from batches dated 2026-10-28, run on AC power
 with an RStudio session, which otherwise held one core at 100%, paused
 (SIGSTOP) for their duration. The Bluetooth daemon still held one core near
 100%. Under those conditions one build run against itself

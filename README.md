@@ -17,15 +17,15 @@ of 2M operations (seed 42: 45% passive limit, 10% crossing limit, 5% market,
 order, a market order, a cancel, or a modify. A crossing order counts as one
 operation however many fills it makes.
 
-<!-- BEGIN generated: headline final-2026-10-28 final -->
+<!-- BEGIN generated: headline final-quiet-2026-10-28 final -->
 | metric | value |
 |---|---|
-| throughput, no per-operation timestamps | 67.6M ops/s |
-| throughput, counter read around every operation | 29.3M ops/s |
-| mean cost of one engine call, closed loop | 24.9 ns |
+| throughput, no per-operation timestamps | 68.9M ops/s |
+| throughput, counter read around every operation | 30.2M ops/s |
+| mean cost of one engine call, closed loop | 24.1 ns |
 | p50 / p99 / p99.9, in 41.7 ns counter steps | 41 / 83 / 125 ns |
 | heap allocations in the measured region | zero in 5 of 5 runs |
-| 1-minute load average when the runs started | 4.81 |
+| before each run: 1-minute load average, CPU idle | 1.82 to 2.22; 83.5% to 95.9% idle |
 <!-- END generated -->
 
 Throughput comes from a pass with no timestamps. Latency comes from a second

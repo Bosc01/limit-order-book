@@ -1,0 +1,1 @@
+final Quiet baseline: CPU idle 95.89% and 1-minute load 2.15 at start (limits 90% and 3), 60 s between runs.
