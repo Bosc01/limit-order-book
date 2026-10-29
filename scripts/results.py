@@ -148,6 +148,7 @@ def summary(batch):
 
 def headline(batch, name):
     e = next(x for x in load(batch) if x.name == name)
+    step = max(r["timer"]["resolution_ns"] for r in e.runs)
     return "\n".join([
         "| metric | value |",
         "|---|---|",
@@ -155,8 +156,9 @@ def headline(batch, name):
         f"{mops(statistics.median(e.values(UNTIMED)))}M ops/s |",
         f"| throughput, counter read around every operation | "
         f"{mops(statistics.median(e.values(TIMED)))}M ops/s |",
-        f"| mean latency | {e.lat('all', 'mean_ns'):.1f} ns |",
-        f"| p50 / p99 / p99.9 | {e.lat('all', 'p50_ns'):.0f} / {e.lat('all', 'p99_ns'):.0f}"
+        f"| mean cost of one engine call, closed loop | {e.lat('all', 'mean_ns'):.1f} ns |",
+        f"| p50 / p99 / p99.9, in {step} ns counter steps | "
+        f"{e.lat('all', 'p50_ns'):.0f} / {e.lat('all', 'p99_ns'):.0f}"
         f" / {e.lat('all', 'p999_ns'):.0f} ns |",
         f"| heap allocations in the measured region | zero in {e.allocs_zero()} of "
         f"{len(e.runs)} runs |",

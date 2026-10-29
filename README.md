@@ -11,15 +11,17 @@ measured no change.
 
 Final engine (`include/lob/`) on an Apple M5, one thread, median of five runs
 of 2M operations (seed 42: 45% passive limit, 10% crossing limit, 5% market,
-30% cancel, 10% modify):
+30% cancel, 10% modify). One operation is one call into the engine: a limit
+order, a market order, a cancel, or a modify. A crossing order counts as one
+operation however many fills it makes.
 
 <!-- BEGIN generated: headline final-2026-10-28 final -->
 | metric | value |
 |---|---|
 | throughput, no per-operation timestamps | 67.6M ops/s |
 | throughput, counter read around every operation | 29.3M ops/s |
-| mean latency | 24.9 ns |
-| p50 / p99 / p99.9 | 41 / 83 / 125 ns |
+| mean cost of one engine call, closed loop | 24.9 ns |
+| p50 / p99 / p99.9, in 41.7 ns counter steps | 41 / 83 / 125 ns |
 | heap allocations in the measured region | zero in 5 of 5 runs |
 | 1-minute load average when the runs started | 4.81 |
 <!-- END generated -->
@@ -137,7 +139,11 @@ open addressing and Fibonacci hashing. The hash was measured on its own only
 in [docs/benchmarks.md](docs/benchmarks.md#profile-driven-attempts-october-2026).
 Five interleaved runs per engine of 200k operations after a 10k
 warmup, fewer than the headline because `naive` slows as its book grows
-(`results/progression-2026-10-28/`):
+(`results/progression-2026-10-28/`). The final engine reads higher here than
+in the headline. These runs end with 19,040 resting orders against 60,225
+after 2M operations, warm up for 10k operations instead of 100k, and come
+from a different batch at a different load. Which of these accounts for the
+gap was not isolated.
 
 <!-- BEGIN generated: progression progression-2026-10-28 -->
 | engine | change | untimed Mops/s | against previous | timed Mops/s | mean ns | p50 | p90 | p99 | p99.9 | allocs per op |
