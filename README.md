@@ -119,8 +119,8 @@ order".
 
 Self-trade prevention is off, cancel-resting, or reject-incoming, chosen at
 construction. When it is off, the check is compiled out of the match loop.
-Owner 0 means no STP group and is exempt, as on venues that scope
-prevention to explicit groups. A cancel-resting kill emits an unsolicited
+Owner 0 means no STP group: an order with owner 0 never triggers
+self-trade prevention and is never canceled by it. A cancel-resting kill emits an unsolicited
 cancel so the resting order's owner hears about it.
 
 Market orders can carry a protection limit: the number of ticks past the
@@ -129,8 +129,13 @@ touch a sweep may go. The remainder is discarded.
 ## Optimization steps
 
 `naive` (`std::map` of `std::list`, cancel by linear search) is the
-reference the other engines are tested against. Each `v_n` changes one
-thing. Five interleaved runs per engine of 200k operations after a 10k
+reference the other engines are tested against. v2 to v5 each change one
+thing. v1 changes two at once: the per-level `std::list` becomes an
+intrusive list, and a hash index replaces the linear search, both on the
+`std::map` ladder `naive` already uses. The final step also combines two:
+open addressing and Fibonacci hashing. The hash was measured on its own only
+in [docs/benchmarks.md](docs/benchmarks.md#profile-driven-attempts-october-2026).
+Five interleaved runs per engine of 200k operations after a 10k
 warmup, fewer than the headline because `naive` slows as its book grows
 (`results/progression-2026-10-28/`):
 
@@ -152,9 +157,12 @@ the previous engine; "ranges overlap" marks the others.
 * v1: in `naive`, cancel and modify average 15.5 and 18.4 us because they
   search the book. The id index brings them to 32.2 and 42.1 ns.
 * v2: the pool beat v1 in every run.
-* v3 (64-byte aligned `Order`) and v4 (branch layout in the match loop): both
-  measured no change, most likely because the working set fits in cache and
-  the branches are well predicted. Both are kept because they cost nothing.
+* v3 (64-byte aligned `Order`) and v4 (branch layout in the match loop): no
+  measured throughput change. Both are kept. The alignment is not free in
+  memory: it pads each order from 56 to 64 bytes, 8 bytes or 14.2% more per
+  order. One hypothesis for the null result is that the working set fits in
+  cache and the branches are well predicted; no cache-miss or branch-miss
+  counts were taken, so it is untested.
 * v5: the flat ladder beat v4 in every run, 13% at the median.
 * final: the open-addressing id map more than doubles v5 (+110%) and
   removes the last allocations. v1 to v5 still allocate a node for every
@@ -183,8 +191,7 @@ not in the test binary; `scripts/net_smoke.sh` exercises it, unmeasured.
   crossed or locked, cached best prices and per-level quantities match the
   model, quantity is conserved (everything that rested is still resting,
   traded, or canceled), and every trade hits a live order at that order's
-  price. Each property was confirmed to fail against a deliberately broken
-  engine.
+  price.
 * Edge cases: TIF and STP combinations, FOK atomicity under both STP modes,
   duplicate and reused ids, band edges, bitmap scans across word boundaries,
   pool growth, and 200k random id-map operations mirrored against
@@ -230,8 +237,9 @@ exec report:
   The engine's mean is 25 ns, so nearly all of that is outside the engine.
 * Linux VM on the same machine, 1 to 128 closed-loop clients
   (`results/gateway_load.md`): throughput levels off near 50k orders/s from
-  8 clients up while round trips grow with the client count, so the gateway
-  thread is the limit, not the engine. It publishes a UDP book snapshot
+  8 clients up while round trips grow with the client count. That plateau
+  points to the gateway thread rather than the engine; the gateway was not
+  profiled. It publishes a UDP book snapshot
   after every order. Every run ends with the clients disconnecting while
   orders rest; none were left after any of the 20 runs.
 
