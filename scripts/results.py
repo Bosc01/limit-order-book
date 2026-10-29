@@ -225,8 +225,8 @@ def progression(batch):
     entries = load(batch)
     lines = [
         "| engine | change | untimed Mops/s | against previous | timed Mops/s | "
-        "mean ns | p50 | p90 | p99 | p99.9 | allocs per op |",
-        "|---|---|---|---|---|---|---|---|---|---|---|",
+        "mean ns | p50 | p90 | p99 | p99.9 | allocs per op | load |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     prev = None
     for e in entries:
@@ -236,7 +236,8 @@ def progression(batch):
             f"{'' if prev is None else against(prev, e)} | "
             f"{mops(statistics.median(e.values(TIMED)))} | {e.lat('all', 'mean_ns'):.1f} | "
             f"{e.lat('all', 'p50_ns'):.0f} | {e.lat('all', 'p90_ns'):.0f} | "
-            f"{e.lat('all', 'p99_ns'):.0f} | {e.lat('all', 'p999_ns'):.0f} | {math.ceil(allocs * 1000 - 1e-9) / 1000:.3f} |")
+            f"{e.lat('all', 'p99_ns'):.0f} | {e.lat('all', 'p999_ns'):.0f} | {math.ceil(allocs * 1000 - 1e-9) / 1000:.3f} | "
+            f"{loads([e])} |")
         prev = e
     return "\n".join(lines) + "\n"
 

@@ -98,8 +98,11 @@ crossing order sweeps.
 "Expected" is the id map: linear probing at load 0.5 averages 1.5 probes for
 a hit and 2.5 for a miss if the hash spreads keys evenly. The worst-case
 bitmap scan is the whole band, 512 words per side. Pool growth and id-map
-rehash are O(n) and fire only when the engine is undersized; a 100M-operation
-run sized for its session recorded neither.
+rehash are O(n) and fire only when the engine is undersized. A 100M-operation
+run sized for its session made zero heap allocations in its measured region,
+so neither fired (`results/endurance_2026-10-22.txt`, load average 7.49 at
+the start). The first endurance runs, in August 2026, predate load recording
+(`results/endurance.csv`).
 
 A flat array instead of a tree, because prices are integer ticks inside a
 bounded band and the index already sorts them. The `std::map` ladder in
@@ -126,8 +129,8 @@ order".
 Self-trade prevention is off, cancel-resting, or reject-incoming, chosen at
 construction. When it is off, the check is compiled out of the match loop.
 Owner 0 means no STP group: an order with owner 0 never triggers
-self-trade prevention and is never canceled by it. A cancel-resting kill emits an unsolicited
-cancel so the resting order's owner hears about it.
+self-trade prevention and is never canceled by it. A cancel-resting kill
+emits an unsolicited cancel so the resting order's owner hears about it.
 
 Market orders can carry a protection limit: the number of ticks past the
 touch a sweep may go. The remainder is discarded.
@@ -150,22 +153,23 @@ from a different batch at a different load. Which of these accounts for the
 gap was not isolated.
 
 <!-- BEGIN generated: progression progression-2026-10-28 -->
-| engine | change | untimed Mops/s | against previous | timed Mops/s | mean ns | p50 | p90 | p99 | p99.9 | allocs per op |
-|---|---|---|---|---|---|---|---|---|---|---|
-| naive | std::map + std::list, O(n) cancel | 0.15 (0.14 to 0.15) |  | 0.15 | 6571.7 | 42 | 22643 | 48577 | 60201 | 0.402 |
-| v1 | map ladder, intrusive list, hash index | 25.5 (25.4 to 25.7) | +16888.2% | 17.2 | 49.0 | 42 | 84 | 125 | 208 | 0.797 |
-| v2 | + slab pool for orders | 32.2 (31.8 to 32.6) | +25.9% | 20.1 | 40.7 | 42 | 83 | 125 | 167 | 0.402 |
-| v3 | + Order aligned to 64 bytes | 32.1 (31.6 to 32.4) | 0.0%, ranges overlap | 20.1 | 40.5 | 42 | 83 | 125 | 167 | 0.402 |
-| v4 | + branch layout in the match loop | 32.8 (32.2 to 33.1) | +2.0%, ranges overlap | 20.1 | 40.5 | 42 | 83 | 125 | 167 | 0.402 |
-| v5 | + flat banded ladder with bitmap | 37.2 (36.7 to 37.6) | +13.4% | 22.0 | 36.4 | 42 | 42 | 84 | 167 | 0.396 |
-| final | + open-addressing id map, Fibonacci hash | 78.2 (77.1 to 78.9) | +110.0% | 30.6 | 23.6 | 41 | 42 | 83 | 125 | 0.000 |
+| engine | change | untimed Mops/s | against previous | timed Mops/s | mean ns | p50 | p90 | p99 | p99.9 | allocs per op | load |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| naive | std::map + std::list, O(n) cancel | 0.15 (0.14 to 0.15) |  | 0.15 | 6571.7 | 42 | 22643 | 48577 | 60201 | 0.402 | 3.42 to 3.60 |
+| v1 | map ladder, intrusive list, hash index | 25.5 (25.4 to 25.7) | +16888.2% | 17.2 | 49.0 | 42 | 84 | 125 | 208 | 0.797 | 3.31 to 3.60 |
+| v2 | + slab pool for orders | 32.2 (31.8 to 32.6) | +25.9% | 20.1 | 40.7 | 42 | 83 | 125 | 167 | 0.402 | 3.31 to 3.60 |
+| v3 | + Order aligned to 64 bytes | 32.1 (31.6 to 32.4) | 0.0%, ranges overlap | 20.1 | 40.5 | 42 | 83 | 125 | 167 | 0.402 | 3.31 to 3.60 |
+| v4 | + branch layout in the match loop | 32.8 (32.2 to 33.1) | +2.0%, ranges overlap | 20.1 | 40.5 | 42 | 83 | 125 | 167 | 0.402 | 3.31 to 3.60 |
+| v5 | + flat banded ladder with bitmap | 37.2 (36.7 to 37.6) | +13.4% | 22.0 | 36.4 | 42 | 42 | 84 | 167 | 0.396 | 3.31 to 3.56 |
+| final | + open-addressing id map, Fibonacci hash | 78.2 (77.1 to 78.9) | +110.0% | 30.6 | 23.6 | 41 | 42 | 83 | 125 | 0.000 | 3.31 to 3.56 |
 <!-- END generated -->
 
 A step is called faster only when every one of its runs beats every run of
 the previous engine; "ranges overlap" marks the others.
 
 * v1: in `naive`, cancel and modify average 15.5 and 18.4 us because they
-  search the book. The id index brings them to 32.2 and 42.1 ns.
+  search the book, which ends each run with 19,040 resting orders. The id
+  index brings them to 32.2 and 42.1 ns.
 * v2: the pool beat v1 in every run.
 * v3 (64-byte aligned `Order`) and v4 (branch layout in the match loop): no
   measured throughput change. Both are kept. The alignment is not free in
@@ -254,8 +258,8 @@ exec report:
 * macOS loopback, one client, 20k synchronous orders, load average 8.1:
   p50 31.5 us, p99 58.4 us, p99.9 90.5 us (`results/wire_2026-10-22.txt`).
   The engine's mean is 25 ns, so nearly all of that is outside the engine.
-* Linux VM on the same machine, 1 to 128 closed-loop clients
-  (`results/gateway_load.md`): throughput levels off near 50k orders/s from
+* Linux VM on the same machine (Lima, 8 vCPUs, 4 GiB), 1 to 128 closed-loop
+  clients (`results/gateway_load.md`): throughput levels off near 50k orders/s from
   8 clients up while round trips grow with the client count. That plateau
   points to the gateway thread rather than the engine; the gateway was not
   profiled. It publishes a UDP book snapshot
