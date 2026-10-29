@@ -7,7 +7,9 @@ TCP order gateway and a UDP market data feed. I wrote it to learn how
 exchange matching engines are built. Each optimization is kept as its own
 engine in `engines/`: seven engines, so six steps, each measured against the
 one before it on the same workload. Two of the six steps, v3 and v4,
-measured no change.
+measured no change. Correctness is checked against `naive`: every engine
+replays the benchmark workload in lockstep with it, and randomized property
+tests audit the final engine after every operation.
 
 Final engine (`include/lob/`) on an Apple M5, one thread, median of five runs
 of 2M operations (seed 42: 45% passive limit, 10% crossing limit, 5% market,
@@ -32,8 +34,10 @@ Each read sits behind an `isb`, which serializes the pipeline, so that pass
 runs at less than half the rate. The p50 is one step of the counter, which
 advances every 41.7 ns. The August 2026 figure of 26.9M ops/s, quoted
 as 27M (`results/final_2m.csv`), had only the timed pass, so it compares
-with the timed row, not the first. Method, machine conditions, and every run:
-[docs/benchmarks.md](docs/benchmarks.md).
+with the timed row, not the first. Comparisons interleave their builds run
+by run, an A/A batch measures the noise, and batches that failed the
+validity rule stay in the tables. Method, machine conditions, and every run:
+[docs/benchmarks.md](docs/benchmarks.md#method).
 
 ## Design
 
@@ -215,6 +219,15 @@ not in the test binary; `scripts/net_smoke.sh` exercises it, unmeasured.
   both left the owner id at its default (owner 0 is now exempt), and a
   cancel-resting kill was invisible to the resting order's owner (the engine
   now emits `on_cancel`, and the gateway forwards it).
+* A review in October 2026 found five gateway bugs, fixed in `69e502c`. The
+  poll loop read one entry past the end of its descriptor array after an
+  accept. Frames after a malformed frame in the same read still reached the
+  book. A market order that partly filled was reported Filled, and one with
+  a rejected id Canceled. A reprice that traded away or was stopped by STP
+  was reported Replaced. A crossing reprice published its trades with the
+  previous message's taker side. The middle three have regression tests in
+  `tests/gateway_test.cpp`. The poll-loop fix is in the socket loop, outside
+  the test binary, and the taker-side fix has no test yet.
 
 ## Gateway and feed
 
