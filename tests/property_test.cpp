@@ -96,10 +96,12 @@ struct Resting {
     Price px;
     Qty   qty;
     Owner owner;
+    std::uint64_t seq; // arrival order; time priority within a price
 };
 
 struct Model {
     std::unordered_map<OrderId, Resting> orders;
+    std::uint64_t arrivals = 0;
 };
 
 // Proof that the random sequences exercised what the properties are about.
@@ -129,6 +131,8 @@ void step(Book& b, Model& m, Coverage& cov, const Op& op, Stp stp) {
     // Depth at the taker's own price before the call, minus the order itself
     // when a modify leaves it at that price.
     std::uint64_t before = 0;
+    // Arrival number the order keeps if it rests; 0 means it arrives now.
+    std::uint64_t seq = 0;
 
     switch (op.kind) {
     case Op::Limit: {
@@ -188,6 +192,9 @@ void step(Book& b, Model& m, Coverage& cov, const Op& op, Stp stp) {
         // the new one; an in-place size-down nets out the same way.
         taker_side  = old.side;
         taker_owner = old.owner;
+        // Same price and no larger: amended in place, priority kept. Any
+        // other change is a fresh arrival.
+        if (old.px == op.px && op.qty <= old.qty) seq = old.seq;
         m.orders.erase(it);
         ++cov.live_modifies;
         filled = r.filled;
@@ -228,6 +235,11 @@ void step(Book& b, Model& m, Coverage& cov, const Op& op, Stp stp) {
         ASSERT_NE(maker.side, taker_side) << "maker on the taker's own side";
         ASSERT_EQ(t.px, maker.px) << "trade not at the resting order's price";
         ASSERT_LE(t.qty, maker.qty);
+        for (const auto& [oid, o] : m.orders) {
+            if (o.side == maker.side && o.px == maker.px) {
+                ASSERT_GE(o.seq, maker.seq) << "trade skipped an earlier order at its price";
+            }
+        }
         if (stp != Stp::None && taker_owner != 0) {
             ASSERT_NE(maker.owner, taker_owner) << "self-trade with STP armed";
         }
@@ -259,7 +271,8 @@ void step(Book& b, Model& m, Coverage& cov, const Op& op, Stp stp) {
 
     if (rested) {
         ASSERT_LT(filled, op.qty);
-        m.orders[op.id] = {taker_side, op.px, Qty(on_book), taker_owner};
+        m.orders[op.id] = {taker_side, op.px, Qty(on_book), taker_owner,
+                           seq != 0 ? seq : ++m.arrivals};
     }
 }
 
